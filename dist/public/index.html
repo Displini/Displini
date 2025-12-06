@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Track your daily habits, protein intake, calendar events, and tasks all in one place. Improve your health and productivity with smart habit tracking." />
+    <title>Displini - Stay focused. Stay Displini.</title>
+    
+    <!-- Canonical URL -->
+    <link rel="canonical" href="https://displini.com/" />
+    
+    <!-- Open Graph / Facebook / WhatsApp -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://displini.com/" />
+    <meta property="og:title" content="Displini - Stay focused. Stay Displini." />
+    <meta property="og:description" content="Track your daily habits, protein intake, calendar events, and tasks all in one place. Improve your health and productivity with smart habit tracking." />
+    <meta property="og:image" content="https://displini.com/images/OG_Image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Displini - Productivity and Health Tracking App" />
+    <meta property="og:site_name" content="Displini" />
+    <meta property="og:locale" content="en_US" />
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://displini.com/" />
+    <meta name="twitter:title" content="Displini - Stay focused. Stay Displini." />
+    <meta name="twitter:description" content="Track your daily habits, protein intake, calendar events, and tasks all in one place. Improve your health and productivity with smart habit tracking." />
+    <meta name="twitter:image" content="https://displini.com/images/OG_Image.png" />
+    <meta name="twitter:image:alt" content="Displini - Productivity and Health Tracking App" />
+    
+    <!-- Resource Hints for Performance -->
+    <link rel="preconnect" href="https://www.googletagmanager.com" crossorigin />
+    <link rel="dns-prefetch" href="https://www.googletagmanager.com" />
+    
+    <!-- Preload LCP Image (Hero Video Poster) -->
+    <link rel="preload" href="/images/OG_Image.png" as="image" fetchpriority="high" />
+    
+    <!-- Preload Critical Fonts -->
+    <link rel="preload" href="/fonts/Satoshi-Variable.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/Manrope-VariableFont_wght.ttf" as="font" type="font/truetype-variations" crossorigin />
+    
+    <!-- Preload Critical Logo -->
+    <link rel="preload" href="/logos/Displini_text_black.svg" as="image" />
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="alternate icon" href="/favicon.svg" />
+    
+    <!-- Apple Touch Icon for iOS -->
+    <link rel="apple-touch-icon" href="/logos/Displini_Icon_black.svg" />
+    
+    <!-- Web App Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+    
+    <!-- Theme Color -->
+    <meta name="theme-color" content="#30C4FF" />
+    
+    <!-- Defer Non-Critical Scripts - Load after page is interactive -->
+    <script>
+      // Defer Google Tag Manager
+      window.dataLayer = window.dataLayer || [];
+      function gtmLoad() {
+        (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+        new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+        j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+        'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+        })(window,document,'script','dataLayer','GTM-K3NM436V');
+      }
+      
+      // Defer Google Analytics
+      function gaLoad() {
+        var script = document.createElement('script');
+        script.async = true;
+        script.src = 'https://www.googletagmanager.com/gtag/js?id=G-TJMTZHQZR5';
+        document.head.appendChild(script);
+        
+        script.onload = function() {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-TJMTZHQZR5');
+        };
+      }
+      
+      // Load analytics after page is interactive (longer delay for better performance)
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+          setTimeout(function() {
+            gtmLoad();
+            gaLoad();
+          }, 3000); // Delay 3 seconds to prioritize content and LCP
+        });
+      } else {
+        setTimeout(function() {
+          gtmLoad();
+          gaLoad();
+        }, 3000);
+      }
+    </script>
+    <script type="module" crossorigin src="/assets/js/index-BMy4VJBD.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/js/react-vendor-TaHHCsB9.js">
+    <link rel="modulepreload" crossorigin href="/assets/js/ui-vendor-CQUacwnc.js">
+    <link rel="modulepreload" crossorigin href="/assets/js/query-vendor-DZaIx4DC.js">
+    <link rel="modulepreload" crossorigin href="/assets/js/router-vendor-BTENBzCY.js">
+    <link rel="stylesheet" crossorigin href="/assets/css/index-D8WBzcUY.css">
+  </head>
+  <body>
+    <!-- Google Tag Manager (noscript) -->
+    <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-K3NM436V"
+    height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+    <!-- End Google Tag Manager (noscript) -->
+    
+    <div id="root"></div>
+  </body>
+</html>

@@ -1,0 +1,24 @@
+{
+  "name": "Displini - Stay focused. Stay Displini.",
+  "short_name": "Displini",
+  "description": "Track your daily habits, protein intake, calendar events, and tasks all in one place. Improve your health and productivity with smart habit tracking.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#EFEFEF",
+  "theme_color": "#30C4FF",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/logos/Displini_Icon_black.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logos/Displini_Icon_black.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}
+
