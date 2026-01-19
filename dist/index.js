@@ -1,0 +1,168 @@
+// server/index.ts
+import "dotenv/config";
+import express2 from "express";
+
+// server/routes.ts
+import { createServer } from "http";
+async function registerRoutes(app2) {
+  app2.post("/api/newsletter/subscribe", async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email || typeof email !== "string" || !email.includes("@")) {
+        return res.status(400).json({ success: false, message: "Invalid email address" });
+      }
+      console.log("Newsletter subscription:", email);
+      const response = {
+        success: true,
+        message: "Successfully subscribed to newsletter"
+      };
+      res.json(response);
+    } catch (error) {
+      console.error("Error subscribing to newsletter:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to subscribe to newsletter";
+      res.status(500).json({
+        success: false,
+        message: errorMessage
+      });
+    }
+  });
+  const httpServer = createServer(app2);
+  return httpServer;
+}
+
+// server/vite.ts
+import express from "express";
+import fs from "fs";
+import path from "path";
+import { createServer as createViteServer, createLogger } from "vite";
+import { nanoid } from "nanoid";
+var viteLogger = createLogger();
+function log(message, source = "express") {
+  const formattedTime = (/* @__PURE__ */ new Date()).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true
+  });
+  console.log(`${formattedTime} [${source}] ${message}`);
+}
+async function setupVite(app2, server) {
+  const httpPort = Number(process.env.PORT) || 4e3;
+  const serverOptions = {
+    middlewareMode: true,
+    // Use the existing HTTP server for HMR; align clientPort with HTTP port
+    hmr: { server, clientPort: httpPort },
+    allowedHosts: true
+  };
+  const enforcedRoot = path.resolve(import.meta.dirname, "..");
+  log(`Using Vite root: ${enforcedRoot}`);
+  const vite = await createViteServer({
+    root: enforcedRoot,
+    configFile: path.resolve(enforcedRoot, "vite.config.ts"),
+    customLogger: {
+      ...viteLogger,
+      error: (msg, options) => {
+        viteLogger.error(msg, options);
+        process.exit(1);
+      }
+    },
+    server: serverOptions,
+    appType: "custom"
+  });
+  app2.use(vite.middlewares);
+  app2.use("*", async (req, res, next) => {
+    const url = req.originalUrl;
+    if (url.startsWith("/api")) {
+      return next();
+    }
+    if (res.headersSent || res.writableEnded) {
+      return;
+    }
+    if (url.includes(".") && !url.endsWith("/")) {
+      return next();
+    }
+    try {
+      const clientTemplate = path.resolve(
+        import.meta.dirname,
+        "..",
+        "index.html"
+      );
+      let template = await fs.promises.readFile(clientTemplate, "utf-8");
+      template = template.replace(
+        `src="/src/main.tsx"`,
+        `src="/src/main.tsx?v=${nanoid()}"`
+      );
+      const page = await vite.transformIndexHtml(url, template);
+      res.status(200).set({ "Content-Type": "text/html" }).end(page);
+    } catch (e) {
+      vite.ssrFixStacktrace(e);
+      next(e);
+    }
+  });
+}
+function serveStatic(app2) {
+  const distPath = path.resolve(import.meta.dirname, "..", "dist", "public");
+  if (!fs.existsSync(distPath)) {
+    throw new Error(
+      `Could not find the build directory: ${distPath}, make sure to build the client first`
+    );
+  }
+  app2.use(express.static(distPath));
+  app2.use("*", (_req, res) => {
+    res.sendFile(path.resolve(distPath, "index.html"));
+  });
+}
+
+// server/index.ts
+var app = express2();
+app.use(express2.json());
+app.use(express2.urlencoded({ extended: false }));
+app.use((req, res, next) => {
+  const start = Date.now();
+  const path2 = req.path;
+  let capturedJsonResponse = void 0;
+  const originalResJson = res.json;
+  res.json = function(bodyJson, ...args) {
+    capturedJsonResponse = bodyJson;
+    return originalResJson.apply(res, [bodyJson, ...args]);
+  };
+  res.on("finish", () => {
+    const duration = Date.now() - start;
+    if (path2.startsWith("/api")) {
+      let logLine = `${req.method} ${path2} ${res.statusCode} in ${duration}ms`;
+      if (capturedJsonResponse) {
+        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+      }
+      if (logLine.length > 80) {
+        logLine = logLine.slice(0, 79) + "\u2026";
+      }
+      log(logLine);
+    }
+  });
+  next();
+});
+(async () => {
+  const server = await registerRoutes(app);
+  app.use((err, _req, res, _next) => {
+    const status = err.status || err.statusCode || 500;
+    const message = err.message || "Internal Server Error";
+    res.status(status).json({ message });
+    throw err;
+  });
+  if (app.get("env") === "development") {
+    await setupVite(app, server);
+  } else {
+    serveStatic(app);
+  }
+  const port = Number(process.env.PORT) || 4e3;
+  server.listen(
+    {
+      port,
+      host: "0.0.0.0",
+      reusePort: true
+    },
+    () => {
+      log(`serving on port ${port}`);
+    }
+  );
+})();

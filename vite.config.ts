@@ -1,5 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "tailwindcss";
+import autoprefixer from "autoprefixer";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -8,14 +10,20 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   plugins: [react()],
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "client/src"),
-      "@shared": path.resolve(__dirname, "shared"),
-      "@assets": path.resolve(__dirname, "attached_assets"),
+  css: {
+    postcss: {
+      // Provide `from` to silence PostCSS warnings about missing source paths
+      from: undefined,
+      plugins: [tailwindcss(), autoprefixer()],
     },
   },
-  root: path.resolve(__dirname, "client"),
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "src"),
+    },
+  },
+  root: path.resolve(__dirname),
+  publicDir: path.resolve(__dirname, "public"),
   build: {
     outDir: path.resolve(__dirname, "dist/public"),
     emptyOutDir: true,
@@ -31,7 +39,7 @@ export default defineConfig({
           'react-vendor': ['react', 'react-dom', 'react/jsx-runtime'],
           'date-vendor': ['date-fns'],
           'ui-vendor': ['lucide-react'],
-          'router-vendor': ['wouter'],
+          'router-vendor': ['react-router-dom'],
           'query-vendor': ['@tanstack/react-query'],
         },
         // Optimize chunk file names
@@ -57,7 +65,7 @@ export default defineConfig({
       'react-dom',
       'react/jsx-runtime',
       'date-fns',
-      'wouter',
+      'react-router-dom',
       '@tanstack/react-query',
     ],
   },

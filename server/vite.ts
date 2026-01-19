@@ -3,7 +3,6 @@ import fs from "fs";
 import path from "path";
 import { createServer as createViteServer, createLogger } from "vite";
 import { type Server } from "http";
-import viteConfig from "../vite.config";
 import { nanoid } from "nanoid";
 
 const viteLogger = createLogger();
@@ -28,18 +27,14 @@ export async function setupVite(app: Express, server: Server) {
     allowedHosts: true as const,
   } as const;
 
-  // Support config exported as a function/promise (Vite's defineConfig async)
-  const resolvedConfig =
-    typeof viteConfig === "function" ? await viteConfig({ command: "serve", mode: "development" }) : viteConfig;
-
-  // Ensure Vite uses the client folder as root regardless of config merging order
-  const enforcedRoot = path.resolve(import.meta.dirname, "..", "client");
+  // Ensure Vite uses the root directory as root regardless of config merging order
+  const enforcedRoot = path.resolve(import.meta.dirname, "..");
   log(`Using Vite root: ${enforcedRoot}`);
 
+  // Let Vite load the config file itself to avoid double processing
   const vite = await createViteServer({
     root: enforcedRoot,
-    ...resolvedConfig,
-    configFile: false,
+    configFile: path.resolve(enforcedRoot, "vite.config.ts"),
     customLogger: {
       ...viteLogger,
       error: (msg, options) => {
@@ -51,15 +46,35 @@ export async function setupVite(app: Express, server: Server) {
     appType: "custom",
   });
 
+  // Use Vite's middleware to handle all requests (including module imports)
+  // This MUST come before any other route handlers to process /src/ modules
   app.use(vite.middlewares);
+  
+  // Fallback to index.html for all routes (SPA fallback)
+  // This should only handle routes that Vite middleware didn't process
   app.use("*", async (req, res, next) => {
     const url = req.originalUrl;
+
+    // Skip if it's an API route
+    if (url.startsWith("/api")) {
+      return next();
+    }
+
+    // Skip if response was already sent by Vite middleware
+    if (res.headersSent || res.writableEnded) {
+      return;
+    }
+
+    // Skip file requests - Vite middleware handles these
+    // Only handle SPA routes (no file extension)
+    if (url.includes(".") && !url.endsWith("/")) {
+      return next();
+    }
 
     try {
       const clientTemplate = path.resolve(
         import.meta.dirname,
         "..",
-        "client",
         "index.html",
       );
 
@@ -79,7 +94,7 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  const distPath = path.resolve(import.meta.dirname, "public");
+  const distPath = path.resolve(import.meta.dirname, "..", "dist", "public");
 
   if (!fs.existsSync(distPath)) {
     throw new Error(
