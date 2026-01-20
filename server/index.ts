@@ -11,7 +11,7 @@ app.use(express.urlencoded({ extended: false }));
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
+  let capturedJsonResponse: unknown | undefined = undefined;
 
   const originalResJson = res.json;
   res.json = function (bodyJson, ...args) {
@@ -41,7 +41,12 @@ app.use((req, res, next) => {
 (async () => {
   const server = await registerRoutes(app);
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  interface ApiError extends Error {
+    status?: number;
+    statusCode?: number;
+  }
+
+  app.use((err: ApiError, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
@@ -56,16 +61,18 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  // Use PORT from env when provided; default to 4000
+  // Use HOST/PORT from env when provided; default to 127.0.0.1:4000 to avoid sandbox bind issues
   const port = Number(process.env.PORT) || 4000;
+  const host = process.env.HOST || "127.0.0.1";
   server.listen(
     {
       port,
-      host: "0.0.0.0",
-      reusePort: true,
+      host,
+      // reusePort can fail in constrained environments; leave undefined unless explicitly enabled
+      reusePort: process.env.REUSE_PORT === "true" ? true : undefined,
     },
     () => {
-      log(`serving on port ${port}`);
+      log(`serving on http://${host}:${port}`);
     }
   );
 })();
