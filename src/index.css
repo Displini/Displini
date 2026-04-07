@@ -1,0 +1,678 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Manrope Variable Font */
+@font-face {
+  font-family: 'Manrope';
+  src: url('/fonts/Manrope-VariableFont_wght.ttf') format('truetype-variations');
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Satoshi Font */
+@font-face {
+  font-family: 'Satoshi';
+  src: url('/fonts/Satoshi-Regular.woff2') format('woff2'),
+       url('/fonts/Satoshi-Regular.woff') format('woff'),
+       url('/fonts/Satoshi-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Satoshi';
+  src: url('/fonts/Satoshi-Medium.woff2') format('woff2'),
+       url('/fonts/Satoshi-Medium.woff') format('woff');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Satoshi';
+  src: url('/fonts/Satoshi-Variable.woff2') format('woff2'),
+       url('/fonts/Satoshi-Variable.woff') format('woff');
+  font-weight: 300 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Satoshi';
+  src: url('/fonts/Satoshi-Black.woff') format('woff'),
+       url('/fonts/Satoshi-Black.ttf') format('truetype');
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* LIGHT MODE */
+:root {
+  --button-outline: rgba(0,0,0, .10);
+  --badge-outline: rgba(0,0,0, .05);
+
+  /* Automatic computation of border around primary / danger buttons */
+  --opaque-button-border-intensity: -8; /* In terms of percentages */
+
+  /* Backgrounds applied on top of other backgrounds when hovered/active */
+  --elevate-1: rgba(0,0,0, .03);
+  --elevate-2: rgba(0,0,0, .08);
+
+  --background: 0 0% 94%; /* #EFEFEF */
+
+  --foreground: 0 7% 5%; /* #0F0D0D */
+
+  --border: 0 0% 88%;
+
+  --card: 0 0% 96%;
+
+  --card-foreground: 0 7% 5%;
+
+  --card-border: 0 0% 90%;
+
+  --sidebar: 0 0% 94%;
+
+  --sidebar-foreground: 0 7% 5%;
+
+  --sidebar-border: 0 0% 86%;
+
+  --sidebar-primary: 197 100% 59%; /* #30C4FF - Default accent */
+
+  --sidebar-primary-foreground: 0 0% 94%;
+
+  --sidebar-accent: 0 0% 88%;
+
+  --sidebar-accent-foreground: 0 7% 5%;
+
+  --sidebar-ring: 197 100% 59%;
+
+  --popover: 0 0% 93%;
+
+  --popover-foreground: 0 7% 5%;
+
+  --popover-border: 0 0% 85%;
+
+  --primary: 197 100% 59%; /* #30C4FF - Default accent */
+
+  --primary-foreground: 0 0% 94%;
+
+  --secondary: 0 0% 90%;
+
+  --secondary-foreground: 0 7% 5%;
+
+  --muted: 0 0% 92%;
+
+  --muted-foreground: 0 7% 46%;
+
+  --accent: 197 100% 59%; /* #30C4FF */
+
+  --accent-foreground: 0 0% 94%;
+
+  --destructive: 0 84% 60%;
+
+  --destructive-foreground: 0 0% 94%;
+
+  --input: 0 7% 40%;
+  --ring: 197 100% 59%; /* #30C4FF */
+  --chart-1: 197 100% 59%; /* #30C4FF */
+  --chart-2: 156 100% 50%; /* #00FF99 */
+  --chart-3: 301 77% 49%; /* #DB1DD8 */
+  --chart-4: 24 80% 58%;
+  --chart-5: 197 100% 59%;
+
+  --success: 156 100% 50%; /* #00FF99 */
+  --success-foreground: 0 7% 5%;
+  --warning: 38 92% 50%;
+  --warning-foreground: 0 7% 5%;
+
+  /* Brand accent colors */
+  --displini-blue: 197 100% 59%; /* #30C4FF - Default */
+  --displini-purple: 301 77% 49%; /* #DB1DD8 */
+  --displini-green: 156 100% 50%; /* #00FF99 */
+
+  --font-sans: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-heading: 'Satoshi', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "SF Mono", Monaco, Menlo, monospace;
+  --radius: .5rem; /* 8px */
+  --shadow-2xs: 0px 1px 2px 0px hsl(220 9% 46% / 0.05);
+  --shadow-xs: 0px 1px 2px 0px hsl(220 9% 46% / 0.06);
+  --shadow-sm: 0px 1px 2px 0px hsl(220 9% 46% / 0.05), 0px 1px 3px -1px hsl(220 9% 46% / 0.08);
+  --shadow: 0px 1px 2px 0px hsl(220 9% 46% / 0.05), 0px 2px 4px -1px hsl(220 9% 46% / 0.08);
+  --shadow-md: 0px 2px 4px -1px hsl(220 9% 46% / 0.06), 0px 4px 6px -1px hsl(220 9% 46% / 0.10);
+  --shadow-lg: 0px 4px 6px -2px hsl(220 9% 46% / 0.05), 0px 10px 15px -3px hsl(220 9% 46% / 0.10);
+  --shadow-xl: 0px 10px 25px -5px hsl(220 9% 46% / 0.10), 0px 20px 25px -5px hsl(220 9% 46% / 0.04);
+  --shadow-2xl: 0px 25px 50px -12px hsl(220 9% 46% / 0.25);
+  --tracking-normal: 0em;
+  --spacing: 0.25rem;
+
+  /* Automatically computed borders - intensity can be controlled by the user by the --opaque-button-border-intensity setting */
+
+  /* Fallback for older browsers */
+  --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  /* Fallback for older browsers */
+  --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  /* Fallback for older browsers */
+  --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  /* Fallback for older browsers */
+  --secondary-border: hsl(from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --secondary-border: hsl(from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  /* Fallback for older browsers */
+  --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  /* Fallback for older browsers */
+  --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  /* Fallback for older browsers */
+  --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  /* Fallback for older browsers */
+  --success-border: hsl(from hsl(var(--success)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --success-border: hsl(from hsl(var(--success)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  /* Fallback for older browsers */
+  --warning-border: hsl(from hsl(var(--warning)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --warning-border: hsl(from hsl(var(--warning)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+}
+
+.dark {
+  --button-outline: rgba(255,255,255, .10);
+  --badge-outline: rgba(255,255,255, .05);
+
+  --opaque-button-border-intensity: 9;  /* In terms of percentages */
+
+  /* Backgrounds applied on top of other backgrounds when hovered/active */
+  --elevate-1: rgba(255,255,255, .04);
+  --elevate-2: rgba(255,255,255, .09);
+
+  --background: 0 7% 5%; /* #0F0D0D */
+
+  --foreground: 0 0% 94%; /* #EFEFEF */
+
+  --border: 0 0% 21%;
+
+  --card: 0 0% 12%;
+
+  --card-foreground: 0 0% 94%;
+
+  --card-border: 0 0% 18%;
+
+  --sidebar: 0 0% 10%;
+
+  --sidebar-foreground: 0 0% 94%;
+
+  --sidebar-border: 0 0% 20%;
+
+  --sidebar-primary: 197 100% 59%; /* #30C4FF - Default accent */
+
+  --sidebar-primary-foreground: 0 7% 5%;
+
+  --sidebar-accent: 0 0% 18%;
+
+  --sidebar-accent-foreground: 0 0% 94%;
+
+  --sidebar-ring: 197 100% 59%;
+
+  --popover: 0 0% 14%;
+
+  --popover-foreground: 0 0% 94%;
+
+  --popover-border: 0 0% 22%;
+
+  --primary: 197 100% 59%; /* #30C4FF - Default accent */
+
+  --primary-foreground: 0 7% 5%;
+
+  --secondary: 0 0% 20%;
+
+  --secondary-foreground: 0 0% 94%;
+
+  --muted: 0 0% 18%;
+
+  --muted-foreground: 0 0% 65%;
+
+  --accent: 197 100% 59%; /* #30C4FF */
+
+  --accent-foreground: 0 7% 5%;
+
+  --destructive: 0 84% 60%;
+
+  --destructive-foreground: 0 0% 94%;
+
+  --input: 0 0% 65%;
+  --ring: 197 100% 59%; /* #30C4FF */
+  --chart-1: 197 100% 59%; /* #30C4FF */
+  --chart-2: 156 100% 50%; /* #00FF99 */
+  --chart-3: 301 77% 49%; /* #DB1DD8 */
+  --chart-4: 24 80% 68%;
+  --chart-5: 197 100% 59%;
+
+  --success: 156 100% 50%; /* #00FF99 */
+  --success-foreground: 0 7% 5%;
+  --warning: 38 92% 60%;
+  --warning-foreground: 0 7% 5%;
+
+  --shadow-2xs: 0px 1px 2px 0px hsl(222 47% 11% / 0.40);
+  --shadow-xs: 0px 1px 2px 0px hsl(222 47% 11% / 0.50);
+  --shadow-sm: 0px 1px 2px 0px hsl(222 47% 11% / 0.40), 0px 1px 3px -1px hsl(222 47% 11% / 0.50);
+  --shadow: 0px 1px 2px 0px hsl(222 47% 11% / 0.40), 0px 2px 4px -1px hsl(222 47% 11% / 0.50);
+  --shadow-md: 0px 2px 4px -1px hsl(222 47% 11% / 0.50), 0px 4px 6px -1px hsl(222 47% 11% / 0.60);
+  --shadow-lg: 0px 4px 6px -2px hsl(222 47% 11% / 0.40), 0px 10px 15px -3px hsl(222 47% 11% / 0.60);
+  --shadow-xl: 0px 10px 25px -5px hsl(222 47% 11% / 0.60), 0px 20px 25px -5px hsl(222 47% 11% / 0.40);
+  --shadow-2xl: 0px 25px 50px -12px hsl(222 47% 11% / 0.80);
+
+  /* Automatically computed borders - intensity can be controlled by the user by the --opaque-button-border-intensity setting */
+
+  /* Fallback for older browsers */
+  --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  /* Fallback for older browsers */
+  --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  /* Fallback for older browsers */
+  --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  /* Fallback for older browsers */
+  --secondary-border: hsl(from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --secondary-border: hsl(from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  /* Fallback for older browsers */
+  --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  /* Fallback for older browsers */
+  --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  /* Fallback for older browsers */
+  --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  /* Fallback for older browsers */
+  --success-border: hsl(from hsl(var(--success)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --success-border: hsl(from hsl(var(--success)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  /* Fallback for older browsers */
+  --warning-border: hsl(from hsl(var(--warning)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --warning-border: hsl(from hsl(var(--warning)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    height: 100%;
+    width: 100%;
+    overflow-x: hidden;
+    /* Fallback for browsers that don't support dvh */
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+    position: relative;
+    /* Fallback for browsers that don't support dvh */
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  #root {
+    min-height: 100%;
+    width: 100%;
+    position: relative;
+  }
+  
+  /* Viewport height fallback for sections - accounts for 80px header */
+  .section-viewport {
+    height: calc(100vh - 80px);
+    height: calc(100dvh - 80px);
+  }
+
+  /* Headings use Satoshi */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading);
+    font-weight: 400; /* Regular */
+  }
+
+  /* Hide floating AI bubble when any popup/modal is open */
+  body.modal-open [data-testid="button-ai-chat"],
+  [data-state="open"] ~ [data-testid="button-ai-chat"],
+  .popup-open [data-testid="button-ai-chat"] {
+    display: none !important;
+  }
+}
+
+/**
+ * Using the elevate system.
+ * Automatic contrast adjustment.
+ *
+ * <element className="hover-elevate" />
+ * <element className="active-elevate-2" />
+ *
+ * // Using the tailwind utility when a data attribute is "on"
+ * <element className="toggle-elevate data-[state=on]:toggle-elevated" />
+ * // Or manually controlling the toggle state
+ * <element className="toggle-elevate toggle-elevated" />
+ *
+ * Elevation systems have to handle many states.
+ * - not-hovered, vs. hovered vs. active  (three mutually exclusive states)
+ * - toggled or not
+ * - focused or not (this is not handled with these utilities)
+ *
+ * Even without handling focused or not, this is six possible combinations that
+ * need to be distinguished from eachother visually.
+ */
+@layer utilities {
+
+  /* Hide ugly search cancel button in Chrome until we can style it properly */
+  input[type="search"]::-webkit-search-cancel-button {
+    @apply hidden;
+  }
+
+  /* Placeholder styling for contentEditable div */
+  [contenteditable][data-placeholder]:empty::before {
+    content: attr(data-placeholder);
+    color: hsl(var(--muted-foreground));
+    pointer-events: none;
+  }
+
+  /* .no-default-hover-elevate/no-default-active-elevate is an escape hatch so consumers of
+   * buttons/badges can remove the automatic brightness adjustment on interactions
+   * and program their own. */
+  .no-default-hover-elevate {}
+
+  .no-default-active-elevate {}
+
+
+  /**
+   * Toggleable backgrounds go behind the content. Hoverable/active goes on top.
+   * This way they can stack/compound. Both will overlap the parent's borders!
+   * So borders will be automatically adjusted both on toggle, and hover/active,
+   * and they will be compounded.
+   */
+  .toggle-elevate::before,
+  .toggle-elevate-2::before {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    inset: 0px;
+    /*border-radius: inherit;   match rounded corners */
+    border-radius: inherit;
+    z-index: -1;
+    /* sits behind content but above backdrop */
+  }
+
+  .toggle-elevate.toggle-elevated::before {
+    background-color: var(--elevate-2);
+  }
+
+  /* If there's a 1px border, adjust the inset so that it covers that parent's border */
+  .border.toggle-elevate::before {
+    inset: -1px;
+  }
+
+  /* Does not work on elements with overflow:hidden! */
+  .hover-elevate:not(.no-default-hover-elevate),
+  .active-elevate:not(.no-default-active-elevate),
+  .hover-elevate-2:not(.no-default-hover-elevate),
+  .active-elevate-2:not(.no-default-active-elevate) {
+    position: relative;
+    z-index: 0;
+  }
+
+  .hover-elevate:not(.no-default-hover-elevate)::after,
+  .active-elevate:not(.no-default-active-elevate)::after,
+  .hover-elevate-2:not(.no-default-hover-elevate)::after,
+  .active-elevate-2:not(.no-default-active-elevate)::after {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    inset: 0px;
+    /*border-radius: inherit;   match rounded corners */
+    border-radius: inherit;
+    z-index: 999;
+    /* sits in front of content */
+  }
+
+  .hover-elevate:hover:not(.no-default-hover-elevate)::after,
+  .active-elevate:active:not(.no-default-active-elevate)::after {
+    background-color: var(--elevate-1);
+  }
+
+  .hover-elevate-2:hover:not(.no-default-hover-elevate)::after,
+  .active-elevate-2:active:not(.no-default-active-elevate)::after {
+    background-color: var(--elevate-2);
+  }
+
+  /* If there's a 1px border, adjust the inset so that it covers that parent's border */
+  .border.hover-elevate:not(.no-hover-interaction-elevate)::after,
+  .border.active-elevate:not(.no-active-interaction-elevate)::after,
+  .border.hover-elevate-2:not(.no-hover-interaction-elevate)::after,
+  .border.active-elevate-2:not(.no-active-interaction-elevate)::after,
+  .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
+    inset: -1px;
+  }
+}
+
+/* Page transition animations */
+@keyframes slideInFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInFromLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Date change animation for containers */
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Liquid fill bar - smooth transition as current time advances */
+.liquid-fill-bar {
+  transition: height 1s linear;
+}
+
+/* Liquid fill animation for timeline - fills from 0 to current time */
+@keyframes liquidFillUp {
+  from {
+    height: 0%;
+  }
+  to {
+    height: var(--fill-target);
+  }
+}
+
+/* Fill animation for completing missed tasks */
+@keyframes fillMissedTask {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.fill-animation {
+  animation: fillMissedTask 0.5s ease-out forwards;
+  opacity: 0;
+}
+
+/* Arrow fade-in animation */
+@keyframes arrowFade {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Fill from top animation for completed tasks */
+@keyframes fillFromTop {
+  0% {
+    height: 0% !important;
+  }
+  100% {
+    height: 100% !important;
+  }
+}
+
+/* Fill from top using height - plays reliably (top-to-bottom fill) */
+@keyframes fillFromTopHeight {
+  0% {
+    height: 0%;
+  }
+  100% {
+    height: 100%;
+  }
+}
+
+/* Class for task-completion fill: animate height 0 → 100% */
+.fill-animation-height {
+  height: 0%;
+  animation: fillFromTopHeight 0.5s ease-out forwards;
+  will-change: height;
+}
+
+/* Task completion bar: fill from top to bottom (covers candy cone). Uses scaleY for reliable playback. */
+@keyframes taskCompleteFill {
+  0% {
+    transform: scaleY(0);
+  }
+  100% {
+    transform: scaleY(1);
+  }
+}
+
+/* Initial state only – no animation; applied on first paint so the animation can run from 0 on next frame */
+.task-complete-fill-bar-initial {
+  transform-origin: top center;
+  transform: scaleY(0);
+  will-change: transform;
+}
+
+.task-complete-fill-bar {
+  transform-origin: top center;
+  transform: scaleY(0);
+  animation: taskCompleteFill 0.6s cubic-bezier(0.33, 1, 0.68, 1) 0.05s forwards;
+  will-change: transform;
+}
+
+/* Static fill - no animation (for tasks completed >650ms ago, e.g. when switching dates) */
+.task-complete-fill-bar-static {
+  transform-origin: top center;
+  transform: scaleY(1);
+}
+
+/* Reverse (uncomplete): fill bar empties from bottom to top */
+@keyframes currentTimePulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.2);
+  }
+}
+
+.current-time-dot-pulse {
+  animation: currentTimePulse 2s ease-in-out infinite;
+}
+
+@keyframes taskCompleteFillReverse {
+  0% {
+    transform: scaleY(1);
+  }
+  100% {
+    transform: scaleY(0);
+  }
+}
+
+.task-complete-fill-bar-reverse {
+  transform-origin: top center;
+  transform: scaleY(1);
+  animation: taskCompleteFillReverse 0.6s cubic-bezier(0.33, 1, 0.68, 1) 0.05s forwards;
+  will-change: transform;
+}
+
+/* Fill from top animation using scaleY */
+@keyframes fillFromTopScaleY {
+  0% {
+    transform: scaleY(0);
+  }
+  100% {
+    transform: scaleY(1);
+  }
+}
+
+/* Class to trigger animation - must set initial transform for animation to work */
+.fill-animation-scaleY {
+  transform-origin: top center;
+  transform: scaleY(0);
+  animation: fillFromTopScaleY 0.5s ease-out forwards;
+}
+
+/* Class to trigger fill animation */
+.fill-animation-trigger {
+  animation: fillFromTop 0.8s ease-out forwards !important;
+  will-change: height;
+}
+
+/* Line through animation for completed tasks */
+@keyframes lineThrough {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}
+

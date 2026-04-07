@@ -66,7 +66,6 @@ A comprehensive health, fitness, and productivity tracking application built wit
 - **PostgreSQL** - Primary database
 - **Drizzle ORM** - Type-safe database queries
 - **OpenAI API** - AI chat integration
-- **Passport** - Authentication middleware
 - **Express Session** - Session management
 
 ### Build Tools
@@ -145,68 +144,105 @@ A comprehensive health, fitness, and productivity tracking application built wit
 
 ```
 Displini/
-├── client/                   # Frontend React application
+├── landing/                    # Landing page code and assets (organized)
+│   ├── assets/                # Static assets
+│   │   ├── images/            # Landing page images
+│   │   ├── videos/            # Landing page videos
+│   │   └── logos/             # Logo files
+│   ├── components/            # Landing page React components
+│   │   ├── LandingHero.tsx
+│   │   ├── LandingFeatures.tsx
+│   │   ├── LandingCarousel.tsx
+│   │   └── ... (other landing components)
+│   ├── hooks/                 # Landing page specific hooks
+│   ├── Landing.tsx            # Main landing page component
+│   ├── landing.module.css     # Landing page styles
+│   └── constants.ts           # Landing page constants
+│
+├── displini-style-guide/      # Design system resources
+│   ├── logo/                  # All Displini logo variations
+│   └── DESIGN_CHEATSHEET.txt  # Developer quick reference (colors, fonts, spacing)
+│
+├── app/                       # Main application code (reference copy)
+│   ├── components/            # React components
+│   │   ├── shared/           # Universal reusable components
+│   │   └── ui/               # Shadcn UI primitives
+│   ├── features/             # Feature modules
+│   │   ├── calendar/
+│   │   ├── reminders/
+│   │   └── todo/
+│   ├── pages/                # Page components
+│   ├── shared/               # Shared app components
+│   └── types/                # App-specific types
+│
+├── ai/                        # AI documentation and guides
+│   ├── ALGORITHM_SPECIFICATION.md
+│   ├── BACKEND_READINESS.md
+│   ├── DEPLOYMENT_GUIDE.md
+│   ├── DESIGN_SYSTEM.md
+│   ├── ERROR_HANDLING_GUIDE.md
+│   ├── ENV_TEMPLATE.md
+│   └── README.md
+│
+├── client/                    # Frontend React application (working code)
 │   ├── src/
-│   │   ├── app/
-│   │   │   ├── components/  # React components
-│   │   │   │   ├── shared/ # Universal reusable components
-│   │   │   │   │   ├── UniversalDialog.tsx
-│   │   │   │   │   ├── ComingSoonDialog.tsx  ← NEW!
-│   │   │   │   │   ├── ContainerHeader.tsx
-│   │   │   │   │   └── EmptyState.tsx
-│   │   │   │   └── ui/     # Shadcn UI primitives
-│   │   │   ├── features/   # Feature modules
+│   │   ├── app/              # Main app code (imports use @/app/...)
+│   │   │   ├── components/   # React components
+│   │   │   │   ├── shared/   # Universal reusable components
+│   │   │   │   └── ui/       # Shadcn UI primitives
+│   │   │   ├── features/     # Feature modules
 │   │   │   │   ├── calendar/
 │   │   │   │   ├── reminders/
 │   │   │   │   └── todo/
-│   │   │   ├── pages/      # Main page components
-│   │   │   │   ├── landing/  # Landing page (/)  ← NEW!
-│   │   │   │   │   └── Landing.tsx
+│   │   │   ├── pages/        # Main page components
+│   │   │   │   ├── landing/  # Landing page (/)
 │   │   │   │   ├── todo/     # Todo app (/app/todo)
 │   │   │   │   ├── calendar/ # Calendar (/app/calendar)
 │   │   │   │   ├── reminders/# Reminders (/app/reminders)
 │   │   │   │   ├── ai/       # AI assistant (/app/ai)
 │   │   │   │   └── profile/  # Profile (/app/profile)
-│   │   │   ├── shared/     # Shared app components
-│   │   │   │   ├── AppHeader.tsx
-│   │   │   │   ├── BottomNav.tsx
-│   │   │   │   └── PageTransition.tsx
-│   │   │   └── types/      # App-specific types
-│   │   ├── hooks/          # Custom React hooks
-│   │   │   ├── useAuth.tsx
-│   │   │   ├── use-toast.ts
-│   │   │   └── useSectionManager.ts
-│   │   ├── lib/            # Utilities and helpers
-│   │   │   ├── utils.ts
-│   │   │   ├── timeUtils.ts
-│   │   │   ├── storageUtils.ts
-│   │   │   └── designTokens.ts
-│   │   ├── types/          # Shared TypeScript definitions
-│   │   ├── App.tsx         # Main app with routing
-│   │   └── main.tsx        # App entry point
-│   ├── public/             # Static assets
-│   │   ├── images/         # Images and SVGs
-│   │   ├── logos/          # Brand logos
-│   │   └── fonts/          # Custom fonts
+│   │   │   ├── shared/       # Shared app components
+│   │   │   └── types/        # App-specific types
+│   │   ├── hooks/            # Custom React hooks
+│   │   ├── lib/              # Utilities and helpers
+│   │   ├── types/            # Shared TypeScript definitions
+│   │   ├── App.tsx           # Main app with routing
+│   │   └── main.tsx          # App entry point
+│   ├── public/               # Static assets (still used by app)
+│   │   ├── images/           # Images and SVGs
+│   │   ├── logos/            # Brand logos
+│   │   └── fonts/            # Custom fonts
 │   └── index.html
-├── server/                  # Backend Express application
-│   ├── db.ts               # Database setup
-│   ├── routes.ts           # API endpoints
-│   ├── openai.ts           # AI integration
-│   ├── replitAuth.ts       # Authentication
-│   ├── vite.ts             # Vite middleware & SPA fallback  ← KEY!
-│   └── index.ts            # Server entry point
-├── shared/                  # Shared frontend/backend code
-│   └── schema.ts           # Database schema (Drizzle)
-├── dist/                    # Production build output
-│   └── public/             # Built React app
-├── DEPLOYMENT_GUIDE.md     # Detailed deployment instructions  ← NEW!
-├── package.json            # Dependencies
-├── vite.config.ts          # Vite configuration
-├── tailwind.config.ts      # Tailwind configuration
-├── tsconfig.json           # TypeScript configuration
-└── drizzle.config.ts       # Drizzle ORM configuration
+│
+├── server/                    # Backend Express application
+│   ├── db.ts                 # Database setup
+│   ├── routes.ts             # API endpoints
+│   ├── openai.ts             # AI integration
+│   ├── storage.ts            # Storage utilities
+│   ├── vite.ts               # Vite middleware & SPA fallback
+│   └── index.ts              # Server entry point
+│
+├── shared/                    # Shared frontend/backend code
+│   └── schema.ts             # Database schema (Drizzle)
+│
+├── dist/                      # Production build output
+│   └── public/               # Built React app
+│
+├── PROJECT_STRUCTURE.md       # Detailed structure documentation
+├── package.json               # Dependencies
+├── vite.config.ts             # Vite configuration
+├── tailwind.config.ts         # Tailwind configuration
+├── tsconfig.json              # TypeScript configuration
+└── drizzle.config.ts          # Drizzle ORM configuration
 ```
+
+### 📁 Folder Organization
+
+- **`/landing/`** - All landing page code and assets in one place
+- **`/displini-style-guide/`** - Design system resources and developer cheatsheet
+- **`/app/`** - Reference copy of main application code structure
+- **`/ai/`** - Documentation for AI assistants and developers
+- **`/client/src/app/`** - Working application code (maintains import paths)
 
 ## 🎨 Architecture & Design
 
@@ -367,12 +403,12 @@ npm start
 Serves on port 4000 by default.
 
 ### **Deployment Platforms**
-- ✅ **Replit** (recommended) - Auto-configured
 - ✅ **Render/Railway/Fly.io** - Best for Express apps
 - ✅ **Traditional VPS** - Full control (AWS, DigitalOcean, etc.)
-- ⚠️ **Vercel/Netlify** - Not recommended (persistent server needed)
+- ✅ **Vercel** - Serverless functions (with Express adapter)
+- ⚠️ **Netlify** - Not recommended (persistent server needed)
 
-📚 **See [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) for detailed instructions!**
+📚 **See [ai/DEPLOYMENT_GUIDE.md](./ai/DEPLOYMENT_GUIDE.md) for detailed instructions!**
 
 ### **Domain Structure**
 Both landing page and app are served from the same domain:
@@ -380,6 +416,14 @@ Both landing page and app are served from the same domain:
 - `https://yourdomain.com/app/*` → Web application
 
 No subdomain or separate hosting needed! ✨
+
+## 📚 Documentation
+
+- **Design System** - See `displini-style-guide/DESIGN_CHEATSHEET.txt` for colors, fonts, and spacing
+- **Deployment Guide** - See `ai/DEPLOYMENT_GUIDE.md` for deployment instructions
+- **Algorithm Spec** - See `ai/ALGORITHM_SPECIFICATION.md` for timeline algorithm details
+- **Project Structure** - See `PROJECT_STRUCTURE.md` for folder organization details
+- **AI Documentation** - See `ai/README.md` for all AI assistant documentation
 
 ## 📈 Roadmap
 
@@ -404,13 +448,16 @@ For issues, questions, or contributions:
 - ✅ Complete health tracking suite
 - ✅ Nutrition and macro tracking
 - ✅ Fitness and workout planning
-- ✅ Smart timeline with drag-and-drop
+- ✅ Adaptive density-based timeline with drag-and-drop
+- ✅ 3-tier task sizing system
 - ✅ AI chat assistant
 - ✅ Universal component system
 - ✅ Zero dialog code duplication
 - ✅ Rounded corners on all dialogs
 - ✅ Onboarding wizard
 - ✅ Dark/light theme
+- ✅ Organized folder structure (landing, style guide, app, ai)
+- ✅ Comprehensive documentation
 
 ---
 
