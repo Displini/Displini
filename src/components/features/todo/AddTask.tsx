@@ -9,10 +9,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, X, Bell, Image as ImageIcon, Zap, Trash2 } from "lucide-react";
+import { Plus, X, Bell, Image as ImageIcon, Zap, Trash2, MapPin, FileText, ListChecks, Repeat } from "lucide-react";
 import { Task, Subtask } from "@/types/types";
 import { EmojiPicker } from "@/components/general/EmojiPicker";
-import { colors } from "@/lib/designSystem";
 
 interface PrefillPayload {
   time?: string;
@@ -84,7 +83,9 @@ export default function AddTask({ onAddTask, prefill, externalOpen, onOpenChange
     return selectedDate ? selectedDate.toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
   });
   const [notes, setNotes] = useState("");
+  const [location, setLocation] = useState("");
   const [color, setColor] = useState(getThemeColor());
+  const [activeIconSection, setActiveIconSection] = useState<'alert' | 'photo' | 'location' | 'note' | 'checklist' | 'repeat' | null>(null);
   const [scheduleType, setScheduleType] = useState<"once" | "daily" | "weekly" | "biweekly" | "monthly">("once");
   const [scheduleInterval, setScheduleInterval] = useState(1);
   const [selectedDays, setSelectedDays] = useState<number[]>([1]); // 0=Sunday, 1=Monday, etc.
@@ -101,7 +102,7 @@ export default function AddTask({ onAddTask, prefill, externalOpen, onOpenChange
   const [quickTaskDate, setQuickTaskDate] = useState(() => {
     return selectedDate ? selectedDate.toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
   });
-  const [quickTasks, setQuickTasks] = useState<Array<{id: string; title: string; emoji: string; time?: string; allDay?: boolean; notes?: string; color?: string; endTime?: string}>>(() => {
+  const [quickTasks, setQuickTasks] = useState<Array<{id: string; title: string; emoji: string; time?: string; allDay?: boolean; notes?: string; location?: string; color?: string; endTime?: string}>>(() => {
     const saved = localStorage.getItem('quick_tasks');
     return saved ? JSON.parse(saved) : [];
   });
@@ -303,6 +304,7 @@ export default function AddTask({ onAddTask, prefill, externalOpen, onOpenChange
         endTime: !isAllDayMode && endTime ? endTime : undefined,
         dueDate: startDate,
         notes: notes.trim() || undefined,
+        location: location.trim() || undefined,
         color: color || undefined,
         repeat: repeatValue,
         subtasks: subtasks.length > 0 ? subtasks : undefined,
@@ -333,6 +335,7 @@ export default function AddTask({ onAddTask, prefill, externalOpen, onOpenChange
             endTime: !isAllDayMode && endTime ? endTime : undefined,
             dueDate: new Date(currentDate),
             notes: notes.trim() || undefined,
+            location: location.trim() || undefined,
             color: color || undefined,
             repeat: repeatValue,
             subtasks: subtasks.length > 0 ? subtasks.map(st => ({ ...st, id: `${Date.now()}-${st.id}` })) : undefined,
@@ -371,6 +374,7 @@ export default function AddTask({ onAddTask, prefill, externalOpen, onOpenChange
         time: !isAllDayMode ? time : undefined,
         endTime: !isAllDayMode && endTime ? endTime : undefined,
         notes: notes.trim() || undefined,
+        location: location.trim() || undefined,
         color: color || undefined,
       };
       const updated = [...quickTasks, quickTask];
@@ -392,7 +396,9 @@ export default function AddTask({ onAddTask, prefill, externalOpen, onOpenChange
     setEndTime("");
     setDueDate(selectedDate ? selectedDate.toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
     setNotes("");
+    setLocation("");
     setColor(getThemeColor());
+    setActiveIconSection(null);
     setScheduleType("once");
     setScheduleInterval(1);
     setSelectedDays([1]);
@@ -428,6 +434,7 @@ export default function AddTask({ onAddTask, prefill, externalOpen, onOpenChange
       endTime: isAllDay ? undefined : quickTask.endTime,
       dueDate: new Date(quickTaskDate),
       notes: quickTask.notes?.trim() || undefined,
+      location: quickTask.location?.trim() || undefined,
       color: quickTask.color || undefined,
     };
     
@@ -447,90 +454,231 @@ export default function AddTask({ onAddTask, prefill, externalOpen, onOpenChange
     <UniversalDialog
       open={actualIsOpen}
       onOpenChange={handleOpenChange}
-      title="Add New Task"
+      title=""
       hideDefaultFooter
+      hideHeader
     >
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'new' | 'quick')} className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="new">Add New Task</TabsTrigger>
-          <TabsTrigger value="quick">Quick Add</TabsTrigger>
-        </TabsList>
+        <div className="flex items-center justify-between w-full gap-2 mb-3 pb-2 border-b">
+          <TabsList className="grid w-full grid-cols-2 flex-1 max-w-[280px]">
+            <TabsTrigger value="new">Add New Task</TabsTrigger>
+            <TabsTrigger value="quick">Quick Add</TabsTrigger>
+          </TabsList>
+          <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0" onClick={() => handleOpenChange(false)} aria-label="Close">
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
         
-        <TabsContent value="new" className="mt-4">
-          <form onSubmit={handleSubmit} className="space-y-5">
+        <TabsContent value="new" className="mt-2">
+          <form onSubmit={handleSubmit} className="space-y-4">
 
-          {/* 1. Title & Emoji */}
-          <div className="space-y-3">
-            <div>
-              <Label htmlFor="title">Task Title *</Label>
+          {/* 1. Emoji + Color - click emoji to open popover with categories */}
+          <div className="flex flex-col items-center gap-3">
+            <Popover>
+              <PopoverTrigger asChild>
+                <button type="button" className="w-16 h-16 rounded-full flex items-center justify-center text-3xl border-2 border-border shadow-sm hover:scale-105 transition-transform" style={{ backgroundColor: color || getThemeColor() }}>
+                  {emoji}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto max-w-sm p-3" align="center">
+                <p className="text-sm font-medium mb-2 text-center">Choose Emoji</p>
+                <EmojiPicker value={emoji} onChange={setEmoji} category="common" />
+              </PopoverContent>
+            </Popover>
+            <div className="flex items-center gap-2 w-full max-w-[240px]">
+              <Label htmlFor="task-color" className="text-sm font-medium shrink-0">Color</Label>
               <Input
-                id="title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Enter task title"
-                required
+                id="task-color"
+                type="color"
+                value={color?.startsWith('#') ? color : '#3b82f6'}
+                onChange={(e) => setColor(e.target.value)}
+                className="w-10 h-10 cursor-pointer p-1 rounded border shrink-0"
               />
-            </div>
-
-            <div>
-              <Label>Emoji</Label>
-              <EmojiPicker 
-                value={emoji}
-                onChange={setEmoji}
-                category="common"
+              <Input
+                type="text"
+                value={color?.startsWith('#') ? color : ''}
+                onChange={(e) => setColor(e.target.value)}
+                placeholder="#hex or theme"
+                className="flex-1 text-xs font-mono h-9 min-w-0"
               />
             </div>
           </div>
 
-          {/* 2. Date */}
-          <div className="p-3 rounded-lg border bg-muted/20">
-            <Label htmlFor="dueDate" className="text-sm font-semibold">📅 Date</Label>
+          {/* 2. Title */}
+          <div>
+            <Label htmlFor="title" className="text-sm font-medium">Title</Label>
+            <Input
+              id="title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="What do you need to do?"
+              required
+              className="mt-1"
+            />
+          </div>
+
+          {/* 3. Date */}
+          <div>
+            <Label htmlFor="dueDate" className="text-sm font-medium">Date</Label>
             <Input
               id="dueDate"
               type="date"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
               required
-              className="mt-2"
+              className="mt-1"
             />
           </div>
 
-          {/* 3. Time/Duration */}
-          <div className="p-3 rounded-lg border bg-muted/20 space-y-3">
-            <Label className="text-sm font-semibold">⏰ Time / Duration</Label>
-            <div className="flex items-center justify-between">
-              <span className="text-sm">All Day Task</span>
-              <Switch
-                checked={isAllDayMode}
-                onCheckedChange={(checked) => setIsAllDayMode(checked)}
-              />
-            </div>
-
-            {!isAllDayMode && (
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="time" className="text-xs">Start Time *</Label>
-                  <Input
-                    id="time"
-                    type="time"
-                    value={time}
-                    onChange={(e) => setTime(e.target.value)}
-                    required={!isAllDayMode}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="end-time" className="text-xs">End Time</Label>
-                  <Input
-                    id="end-time"
-                    type="time"
-                    value={endTime}
-                    onChange={(e) => setEndTime(e.target.value)}
-                    placeholder="Optional"
-                  />
-                </div>
-              </div>
-            )}
+          {/* 4. All Day switch */}
+          <div className="flex items-center justify-between py-2 rounded-lg border bg-muted/30 px-3">
+            <span className="text-sm font-medium">All day task</span>
+            <Switch
+              checked={isAllDayMode}
+              onCheckedChange={(checked) => setIsAllDayMode(checked)}
+            />
           </div>
+
+          {/* Start / End - only shown when not all-day */}
+          {!isAllDayMode && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="time" className="text-xs">Start</Label>
+                <Input
+                  id="time"
+                  type="time"
+                  value={time}
+                  onChange={(e) => setTime(e.target.value)}
+                  required
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label htmlFor="end-time" className="text-xs">End</Label>
+                <Input
+                  id="end-time"
+                  type="time"
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* 5. Icon row: Alert, Photo, Location, Note, Checklist (hidden for all-day), Repeat */}
+          <div className="flex items-center justify-center gap-1.5 py-2 flex-wrap">
+            <button type="button" onClick={() => setActiveIconSection(activeIconSection === 'alert' ? null : 'alert')} className={`flex flex-col items-center gap-0.5 p-2 rounded-lg border transition-colors min-w-[48px] ${activeIconSection === 'alert' ? 'bg-primary/10 border-primary' : 'bg-muted/30 border-transparent hover:bg-muted/50'}`} title="Alerts"><Bell className="w-4 h-4" /><span className="text-[9px]">Alert</span></button>
+            {!isAllDayMode && (
+              <>
+                <button type="button" onClick={() => setActiveIconSection(activeIconSection === 'photo' ? null : 'photo')} className={`flex flex-col items-center gap-0.5 p-2 rounded-lg border transition-colors min-w-[48px] ${activeIconSection === 'photo' ? 'bg-primary/10 border-primary' : 'bg-muted/30 border-transparent hover:bg-muted/50'}`} title="Photos"><ImageIcon className="w-4 h-4" /><span className="text-[9px]">Photo</span></button>
+                <button type="button" onClick={() => setActiveIconSection(activeIconSection === 'location' ? null : 'location')} className={`flex flex-col items-center gap-0.5 p-2 rounded-lg border transition-colors min-w-[48px] ${activeIconSection === 'location' ? 'bg-primary/10 border-primary' : 'bg-muted/30 border-transparent hover:bg-muted/50'}`} title="Location"><MapPin className="w-4 h-4" /><span className="text-[9px]">Location</span></button>
+                <button type="button" onClick={() => setActiveIconSection(activeIconSection === 'note' ? null : 'note')} className={`flex flex-col items-center gap-0.5 p-2 rounded-lg border transition-colors min-w-[48px] ${activeIconSection === 'note' ? 'bg-primary/10 border-primary' : 'bg-muted/30 border-transparent hover:bg-muted/50'}`} title="Notes"><FileText className="w-4 h-4" /><span className="text-[9px]">Note</span></button>
+                <button type="button" onClick={() => setActiveIconSection(activeIconSection === 'checklist' ? null : 'checklist')} className={`flex flex-col items-center gap-0.5 p-2 rounded-lg border transition-colors min-w-[48px] ${activeIconSection === 'checklist' ? 'bg-primary/10 border-primary' : 'bg-muted/30 border-transparent hover:bg-muted/50'}`} title="Checklist"><ListChecks className="w-4 h-4" /><span className="text-[9px]">Checklist</span></button>
+              </>
+            )}
+            <button type="button" onClick={() => setActiveIconSection(activeIconSection === 'repeat' ? null : 'repeat')} className={`flex flex-col items-center gap-0.5 p-2 rounded-lg border transition-colors min-w-[48px] ${activeIconSection === 'repeat' ? 'bg-primary/10 border-primary' : 'bg-muted/30 border-transparent hover:bg-muted/50'}`} title="Repeat"><Repeat className="w-4 h-4" /><span className="text-[9px]">Repeat</span></button>
+          </div>
+
+          {/* Expanded sections for icon row - hide photo/location/note/checklist for all-day */}
+          {activeIconSection === 'alert' && (
+            <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+              <Label className="text-sm font-medium flex items-center gap-2"><Bell className="w-4 h-4" /> Alerts</Label>
+              {alertTimes.map((t, i) => (
+                <div key={i} className="flex items-center gap-2 text-sm p-2 bg-background rounded border">
+                  <span className="flex-1">🔔 {t}</span>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => removeAlert(t)}><X className="w-3 h-3" /></Button>
+                </div>
+              ))}
+              <div className="flex gap-2">
+                <Input type="time" value={newAlertTime} onChange={(e) => setNewAlertTime(e.target.value)} placeholder="Add time" className="flex-1" />
+                <Button type="button" variant="outline" size="sm" onClick={addAlert} disabled={!newAlertTime}><Plus className="w-4 h-4" /></Button>
+              </div>
+            </div>
+          )}
+          {!isAllDayMode && activeIconSection === 'photo' && (
+            <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+              <Label className="text-sm font-medium flex items-center gap-2"><ImageIcon className="w-4 h-4" /> Photos</Label>
+              {attachments.length > 0 && (
+                <div className="grid grid-cols-3 gap-2">
+                  {attachments.map((img, i) => (
+                    <div key={i} className="relative group">
+                      <img src={img} alt="" className="w-full h-16 object-cover rounded border" />
+                      <Button type="button" variant="destructive" size="sm" className="absolute top-0.5 right-0.5 h-5 w-5 p-0 opacity-0 group-hover:opacity-100" onClick={() => removeAttachment(i)}><X className="w-3 h-3" /></Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <Input type="file" accept="image/*" multiple onChange={handleImageUpload} className="cursor-pointer text-sm" />
+            </div>
+          )}
+          {!isAllDayMode && activeIconSection === 'location' && (
+            <div className="rounded-lg border bg-muted/20 p-3">
+              <Label className="text-sm font-medium flex items-center gap-2"><MapPin className="w-4 h-4" /> Location</Label>
+              <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Where?" className="mt-2" />
+            </div>
+          )}
+          {!isAllDayMode && activeIconSection === 'note' && (
+            <div className="rounded-lg border bg-muted/20 p-3">
+              <Label className="text-sm font-medium flex items-center gap-2"><FileText className="w-4 h-4" /> Notes</Label>
+              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Add notes..." rows={3} className="mt-2" />
+            </div>
+          )}
+          {!isAllDayMode && activeIconSection === 'checklist' && (
+            <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+              <Label className="text-sm font-medium flex items-center gap-2"><ListChecks className="w-4 h-4" /> Subtasks</Label>
+              {subtasks.map((st) => (
+                <div key={st.id} className="flex items-center gap-2 text-sm p-2 bg-background rounded border">
+                  <span className="flex-1">{st.text}</span>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => removeSubtask(st.id)}><X className="w-3 h-3" /></Button>
+                </div>
+              ))}
+              <div className="flex gap-2">
+                <Input value={newSubtaskText} onChange={(e) => setNewSubtaskText(e.target.value)} placeholder="Add subtask" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSubtask(); } }} className="flex-1" />
+                <Button type="button" variant="outline" size="sm" onClick={addSubtask} disabled={!newSubtaskText.trim()}><Plus className="w-4 h-4" /></Button>
+              </div>
+            </div>
+          )}
+          {activeIconSection === 'repeat' && (
+            <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+              <Label className="text-sm font-medium flex items-center gap-2"><Repeat className="w-4 h-4" /> Repeat</Label>
+              <Select value={scheduleType} onValueChange={(value: any) => setScheduleType(value)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="once">Once (no repeat)</SelectItem>
+                  <SelectItem value="daily">Daily</SelectItem>
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                  <SelectItem value="biweekly">Every 2 weeks</SelectItem>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                </SelectContent>
+              </Select>
+              {scheduleType !== "once" && scheduleType !== "weekly" && (
+                <Input type="number" min={1} max={12} value={scheduleInterval} onChange={(e) => setScheduleInterval(parseInt(e.target.value) || 1)} className="w-20" placeholder="1" />
+              )}
+              {scheduleType === "weekly" && (
+                <div>
+                  <Label className="text-xs text-muted-foreground">Select days</Label>
+                  <div className="grid grid-cols-7 gap-1 mt-2">
+                    {weekDays.map((day) => (
+                      <button key={day.value} type="button" onClick={() => toggleDay(day.value)} className={`py-2 px-1 text-xs rounded-lg border-2 transition-all ${selectedDays.includes(day.value) ? 'bg-primary text-primary-foreground border-primary font-semibold' : 'bg-background border-muted hover:border-primary/50'}`} title={day.fullLabel}>{day.label}</button>
+                    ))}
+                  </div>
+                  {selectedDays.length === 0 && <p className="text-xs text-amber-600 mt-1">Select at least one day</p>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 6. Quick Add slider - like all day task style */}
+          {scheduleType === "once" && (
+            <div className="flex items-center justify-between py-3 px-4 rounded-full border bg-muted/30">
+              <span className="text-sm font-medium flex items-center gap-2">
+                <Zap className="w-4 h-4 text-amber-500" />
+                Save to Quick Add
+              </span>
+              <Switch checked={saveToQuickAdd} onCheckedChange={setSaveToQuickAdd} />
+            </div>
+          )}
 
           {/* Overlap Warning */}
           {overlappingTasks.length > 0 && (
@@ -553,267 +701,6 @@ export default function AddTask({ onAddTask, prefill, externalOpen, onOpenChange
               </p>
             </div>
           )}
-
-          {/* 4. Repeat */}
-          <div className="p-3 rounded-lg border bg-muted/20 space-y-3">
-            <Label className="text-sm font-semibold">🔁 Repeat</Label>
-            <div className="flex gap-2">
-              <Select value={scheduleType} onValueChange={(value: any) => setScheduleType(value)}>
-                <SelectTrigger className="flex-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="once">Once (no repeat)</SelectItem>
-                  <SelectItem value="daily">Daily</SelectItem>
-                  <SelectItem value="weekly">Weekly</SelectItem>
-                  <SelectItem value="biweekly">Every 2 weeks</SelectItem>
-                  <SelectItem value="monthly">Monthly</SelectItem>
-                </SelectContent>
-              </Select>
-              
-              {scheduleType !== "once" && scheduleType !== "weekly" && (
-                <Input
-                  type="number"
-                  min="1"
-                  max="12"
-                  value={scheduleInterval}
-                  onChange={(e) => setScheduleInterval(parseInt(e.target.value) || 1)}
-                  className="w-20"
-                  placeholder="1"
-                />
-              )}
-            </div>
-            
-            {/* Day selector for weekly tasks */}
-            {scheduleType === "weekly" && (
-              <div>
-                <Label className="text-xs text-muted-foreground">Select days</Label>
-                <div className="grid grid-cols-7 gap-1 mt-2">
-                  {weekDays.map(day => (
-                    <button
-                      key={day.value}
-                      type="button"
-                      onClick={() => toggleDay(day.value)}
-                      className={`py-2 px-1 text-xs rounded-lg border-2 transition-all ${
-                        selectedDays.includes(day.value)
-                          ? 'bg-primary text-primary-foreground border-primary font-semibold'
-                          : 'bg-background border-muted hover:border-primary/50'
-                      }`}
-                      title={day.fullLabel}
-                    >
-                      {day.label}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  {selectedDays.length === 0 && '⚠️ Select at least one day'}
-                  {selectedDays.length > 0 && `Repeats: ${selectedDays.map(d => weekDays.find(wd => wd.value === d)?.label).join(', ')}`}
-                </p>
-              </div>
-            )}
-            
-            {scheduleType !== "once" && scheduleType !== "weekly" && (
-              <p className="text-xs text-muted-foreground">
-                {scheduleType === "daily" && `Repeats every ${scheduleInterval} day${scheduleInterval > 1 ? 's' : ''}`}
-                {scheduleType === "biweekly" && `Repeats every ${scheduleInterval * 2} weeks`}
-                {scheduleType === "monthly" && `Repeats every ${scheduleInterval} month${scheduleInterval > 1 ? 's' : ''}`}
-              </p>
-            )}
-          </div>
-
-          {/* 5. Alerts (NEW) */}
-          <div className="p-3 rounded-lg border bg-muted/20 space-y-3">
-            <Label className="text-sm font-semibold flex items-center gap-2">
-              <Bell className="w-4 h-4" />
-              Alerts
-            </Label>
-            <div className="space-y-2">
-              {alertTimes.map((time, index) => (
-                <div key={index} className="flex items-center gap-2 text-sm p-2 bg-background rounded border">
-                  <span className="flex-1">🔔 {time}</span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => removeAlert(time)}
-                  >
-                    <X className="w-3 h-3" />
-                  </Button>
-                </div>
-              ))}
-              <div className="flex gap-2">
-                <Input
-                  type="time"
-                  value={newAlertTime}
-                  onChange={(e) => setNewAlertTime(e.target.value)}
-                  placeholder="Add alert time"
-                  className="flex-1"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={addAlert}
-                  disabled={!newAlertTime}
-                  className="disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
-                >
-                  <Plus className="w-4 h-4" />
-                </Button>
-              </div>
-              {alertTimes.length === 0 && (
-                <p className="text-xs text-muted-foreground">No alerts set</p>
-              )}
-            </div>
-          </div>
-
-          {/* 6. Photos/Screenshots */}
-          <div className="p-3 rounded-lg border bg-muted/20 space-y-3">
-            <Label className="text-sm font-semibold flex items-center gap-2">
-              <ImageIcon className="w-4 h-4" />
-              Photos / Screenshots
-            </Label>
-            <div className="space-y-2">
-              {attachments.length > 0 && (
-                <div className="grid grid-cols-3 gap-2">
-                  {attachments.map((img, index) => (
-                    <div key={index} className="relative group">
-                      <img
-                        src={img}
-                        alt={`Attachment ${index + 1}`}
-                        className="w-full h-20 object-cover rounded-lg border"
-                      />
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => removeAttachment(index)}
-                        className="absolute top-1 right-1 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <X className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div>
-                <Input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handleImageUpload}
-                  className="cursor-pointer"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  {attachments.length === 0 ? 'No images attached' : `${attachments.length} image(s) attached`}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* 7. Subtasks - Hide for all-day tasks */}
-          {!isAllDayMode && (
-          <div className="p-3 rounded-lg border bg-muted/20 space-y-3">
-            <Label className="text-sm font-semibold">✓ Subtasks</Label>
-            <div className="space-y-2">
-              {subtasks.map((subtask) => (
-                <div key={subtask.id} className="flex items-center gap-2 text-sm p-2 bg-background rounded border">
-                  <span className="flex-1">{subtask.text}</span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => removeSubtask(subtask.id)}
-                  >
-                    <X className="w-3 h-3" />
-                  </Button>
-                </div>
-              ))}
-              <div className="flex gap-2">
-                <Input
-                  value={newSubtaskText}
-                  onChange={(e) => setNewSubtaskText(e.target.value)}
-                  placeholder="Add subtask"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      addSubtask();
-                    }
-                  }}
-                  className="flex-1"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={addSubtask}
-                  disabled={!newSubtaskText.trim()}
-                  className="disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
-                >
-                  <Plus className="w-4 h-4" />
-                </Button>
-              </div>
-              {subtasks.length === 0 && (
-                <p className="text-xs text-muted-foreground">No subtasks added</p>
-              )}
-            </div>
-          </div>
-          )}
-
-          {/* 8. Notes */}
-          <div>
-            <Label htmlFor="notes">📝 Notes (Optional)</Label>
-            <Textarea
-              id="notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Add any additional notes"
-              rows={3}
-              className="mt-2"
-            />
-          </div>
-
-          {/* 9. Task Color */}
-          <div>
-            <Label htmlFor="task-color">🎨 Task Color (optional)</Label>
-            <div className="flex items-center gap-3 mt-2">
-              <Input
-                id="task-color"
-                type="color"
-                value={color || "#8b5cf6"}
-                onChange={(e) => setColor(e.target.value)}
-                className="w-20 h-10 cursor-pointer"
-              />
-              <span className="text-sm text-muted-foreground flex-1">
-                {color || "Using theme color"}
-              </span>
-              {color && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setColor("")}
-                >
-                  Reset
-                </Button>
-              )}
-            </div>
-          </div>
-
-            {/* 10. Quick Add Checkbox */}
-            {scheduleType === "once" && (
-              <div className="flex items-center gap-2 p-3 rounded-lg border bg-muted/20">
-                <input
-                  type="checkbox"
-                  id="save-quick-add"
-                  checked={saveToQuickAdd}
-                  onChange={(e) => setSaveToQuickAdd(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300"
-                />
-                <Label htmlFor="save-quick-add" className="cursor-pointer text-sm flex-1">
-                  ⚡ Save to Quick Add (for faster task creation next time)
-                </Label>
-              </div>
-            )}
 
             <div className="flex gap-2 pt-4 border-t">
               <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} className="flex-1">
@@ -838,34 +725,38 @@ export default function AddTask({ onAddTask, prefill, externalOpen, onOpenChange
         <TabsContent value="quick" className="mt-4">
           <div className="space-y-3">
             {quickTasks.length > 0 ? (
-              <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+              <div className="flex flex-col gap-2 max-h-[320px] overflow-y-auto pr-1">
                 {quickTasks.map(qt => (
-                  <div
-                    key={qt.id}
-                    className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 cursor-pointer transition-colors"
-                    onClick={() => handleUseQuickTask(qt)}
-                  >
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <span className="text-2xl flex-shrink-0">{qt.emoji}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{qt.title}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {qt.allDay ? 'All day' : qt.time ? `${qt.time}${qt.endTime ? ` - ${qt.endTime}` : ''}` : 'Timed task'}
-                        </p>
-                      </div>
+                  <div key={qt.id} className="flex items-center gap-3 p-2 rounded-lg border bg-muted/30 hover:bg-muted/50 transition-colors">
+                    <button
+                      type="button"
+                      onClick={() => handleUseQuickTask(qt)}
+                      className="w-12 h-12 rounded-full flex items-center justify-center text-xl flex-shrink-0 transition-all hover:scale-105 active:scale-95 border-2"
+                      style={{
+                        backgroundColor: qt.color ? `${qt.color}1a` : 'hsl(var(--primary) / 0.1)',
+                        borderColor: qt.color || 'hsl(var(--primary) / 0.3)',
+                      }}
+                    >
+                      {qt.emoji || "📝"}
+                    </button>
+                    <div className="flex-1 min-w-0 text-left">
+                      <p className="text-sm font-medium truncate">{qt.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {qt.allDay ? "All day" : qt.time ? `${qt.time}${qt.endTime ? `–${qt.endTime}` : ""}` : "Timed"}
+                      </p>
                     </div>
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-8 w-8 p-0 flex-shrink-0"
+                      className="h-8 w-8 p-0 rounded-full flex-shrink-0 hover:bg-destructive hover:text-destructive-foreground"
                       onClick={(e) => {
                         e.stopPropagation();
                         removeQuickTask(qt.id);
                       }}
                       title="Remove from Quick Add"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-3 h-3" />
                     </Button>
                   </div>
                 ))}

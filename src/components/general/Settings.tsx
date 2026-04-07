@@ -29,6 +29,7 @@ import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
+import { getHapticsSettingDisplay, setHapticsEnabled } from "@/lib/haptics";
 
 const themes = [
   { id: "blue", name: "Blue", primary: "59 91% 47%", primaryDark: "210 100% 60%" },
@@ -58,6 +59,9 @@ export default function Settings({ open, onOpenChange }: SettingsProps) {
   const [showTodosInCalendar, setShowTodosInCalendar] = useState(false);
   const [stickyDateCarousel, setStickyDateCarousel] = useState(false);
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
+  const [hapticFeedbackEnabled, setHapticFeedbackEnabled] = useState(() =>
+    getHapticsSettingDisplay()
+  );
   const [quoteEnabled, setQuoteEnabled] = useState(() => {
     const saved = localStorage.getItem('quote_settings');
     return saved ? JSON.parse(saved).enabled : false;
@@ -104,6 +108,7 @@ export default function Settings({ open, onOpenChange }: SettingsProps) {
     const savedShowTodosInCalendar = localStorage.getItem("showTodosInCalendar") === "true";
     const savedStickyCarousel = localStorage.getItem("stickyDateCarousel") === "true";
     const savedAutoScroll = localStorage.getItem("autoScrollEnabled") !== "false";
+    setHapticFeedbackEnabled(getHapticsSettingDisplay());
     const savedDOB = localStorage.getItem('userDateOfBirth') || "";
     const savedLanguage = localStorage.getItem("language") || "en";
     setSelectedTheme(savedTheme);
@@ -243,6 +248,11 @@ export default function Settings({ open, onOpenChange }: SettingsProps) {
   const handleAutoScrollChange = (checked: boolean) => {
     setAutoScrollEnabled(checked);
     localStorage.setItem("autoScrollEnabled", String(checked));
+  };
+
+  const handleHapticFeedbackChange = (checked: boolean) => {
+    setHapticFeedbackEnabled(checked);
+    setHapticsEnabled(checked);
   };
 
   // Removed Work/School header toggles; these are accessible as features now
@@ -682,6 +692,17 @@ export default function Settings({ open, onOpenChange }: SettingsProps) {
         <Switch
           checked={autoScrollEnabled}
           onCheckedChange={handleAutoScrollChange}
+        />
+      </div>
+
+      <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/20">
+        <div>
+          <Label className="cursor-pointer font-medium">Haptic feedback</Label>
+          <p className="text-xs text-muted-foreground mt-1">Vibration when marking tasks done or undone (respects reduced motion)</p>
+        </div>
+        <Switch
+          checked={hapticFeedbackEnabled}
+          onCheckedChange={handleHapticFeedbackChange}
         />
       </div>
 

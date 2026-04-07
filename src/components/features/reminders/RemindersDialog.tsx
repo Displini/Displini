@@ -22,6 +22,7 @@ interface Reminder {
   emoji: string;
   color?: string;
   subtasks?: Subtask[];
+  location?: string;
 }
 
 interface ScheduleDialogState {
@@ -119,7 +120,8 @@ export default function RemindersDialog() {
         reminderId: reminder.id,
         dueDate: new Date(scheduleDate).toISOString(),
         color: reminder.color,
-        subtasks: reminder.subtasks || undefined
+        subtasks: reminder.subtasks || undefined,
+        location: reminder.location,
       };
       todos.push(newTask);
       localStorage.setItem('todos', JSON.stringify(todos));

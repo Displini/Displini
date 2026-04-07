@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { X, Moon, Heart, Pill, Droplets, Briefcase, GraduationCap, BookOpen, Dumbbell, BarChart3, Settings, Sun, Bell, Utensils } from "lucide-react";
+import { X, Moon, Heart, Pill, Droplets, Briefcase, GraduationCap, BookOpen, Dumbbell, BarChart3, Settings, Sun, ChevronDown, ChevronRight, Laptop, HeartPulse, Utensils } from "lucide-react";
 import { colors } from "@/lib/designSystem";
 
 interface FeaturesSidebarProps {
@@ -13,63 +13,64 @@ interface FeaturesSidebarProps {
   onFeatureClick?: (feature: string) => void;
 }
 
-// Features ordered to match landing page carousel (Section 3)
-// Order: Sleep, Water, Medication, Menstrual, Sport, Journal, Office, School
-const features = [
+type FeatureItem = {
+  id: string;
+  name: string;
+  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
+  color: string;
+};
+
+// Categories with their features - click to expand and see features
+const categories = [
   {
-    id: 'sleep',
-    name: 'Sleep Schedule',
-    icon: Moon,
-    color: colors.features.sleep
+    id: 'productivity',
+    name: 'Productivity',
+    icon: Laptop,
+    color: colors.features.office,
+    features: [
+      { id: 'work', name: 'Office', icon: Briefcase, color: colors.features.office },
+      { id: 'school', name: 'School', icon: GraduationCap, color: colors.features.school },
+    ] as FeatureItem[],
   },
   {
-    id: 'water',
-    name: 'Water Intake',
+    id: 'health',
+    name: 'Health & Wellness',
+    icon: HeartPulse,
+    color: colors.features.menstrual,
+    features: [
+      { id: 'menstrual', name: 'Menstrual Cycle', icon: Heart, color: colors.features.menstrual },
+      { id: 'medication', name: 'Medication', icon: Pill, color: colors.features.medication },
+    ] as FeatureItem[],
+  },
+  {
+    id: 'nutrition',
+    name: 'Food & Hydration',
     icon: Droplets,
-    color: colors.features.water
-  },
-  {
-    id: 'medication',
-    name: 'Medication',
-    icon: Pill,
-    color: colors.features.medication
-  },
-  {
-    id: 'food',
-    name: 'Food Tracker',
-    icon: Utensils,
-    color: colors.features.food || '#f59e0b'
-  },
-  {
-    id: 'menstrual',
-    name: 'Menstrual Cycle',
-    icon: Heart,
-    color: colors.features.menstrual
+    color: colors.features.water,
+    features: [
+      { id: 'water', name: 'Water Intake', icon: Droplets, color: colors.features.water },
+      { id: 'food', name: 'Food Tracker', icon: Utensils, color: colors.features.food || '#f59e0b' },
+    ] as FeatureItem[],
   },
   {
     id: 'sport',
     name: 'Sport',
     icon: Dumbbell,
-    color: colors.features.sport
+    color: colors.features.sport,
+    features: [
+      { id: 'sport', name: 'Sport', icon: Dumbbell, color: colors.features.sport },
+    ] as FeatureItem[],
   },
   {
-    id: 'journal',
-    name: 'Journal',
-    icon: BookOpen,
-    color: colors.features.journal
+    id: 'rest',
+    name: 'Rest & Reflect',
+    icon: Moon,
+    color: colors.features.sleep,
+    features: [
+      { id: 'sleep', name: 'Sleep Schedule', icon: Moon, color: colors.features.sleep },
+      { id: 'journal', name: 'Journal', icon: BookOpen, color: colors.features.journal },
+    ] as FeatureItem[],
   },
-  {
-    id: 'work',
-    name: 'Office',
-    icon: Briefcase,
-    color: colors.features.office
-  },
-  {
-    id: 'school',
-    name: 'School',
-    icon: GraduationCap,
-    color: colors.features.school
-  }
 ];
 
 export function FeaturesSidebar({ 
@@ -81,23 +82,29 @@ export function FeaturesSidebar({
   onFeatureClick
 }: FeaturesSidebarProps) {
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
+    () => new Set(categories.map((c) => c.id))
+  );
 
   const handleFeatureClick = (featureId: string) => {
-    // Dispatch event for centralized feature dialog handler
     window.dispatchEvent(new CustomEvent('openFeature', { detail: { featureId } }));
-    if (onFeatureClick) {
-      onFeatureClick(featureId);
-    }
+    if (onFeatureClick) onFeatureClick(featureId);
     onClose();
+  };
+
+  const toggleCategory = (categoryId: string) => {
+    setExpandedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(categoryId)) next.delete(categoryId);
+      else next.add(categoryId);
+      return next;
+    });
   };
 
   const handleToggleDarkMode = () => {
     setIsDarkMode(!isDarkMode);
-    if (!isDarkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+    if (!isDarkMode) document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
   };
 
   if (!isOpen && !isClosing) return null;
@@ -109,15 +116,15 @@ export function FeaturesSidebar({
       onClick={onClose}
     >
       <div 
-        className="fixed right-0 top-0 h-full w-80 bg-white dark:bg-gray-900 shadow-2xl border-l border-gray-200 dark:border-gray-700 rounded-tl-3xl rounded-bl-3xl overflow-hidden" 
+        className="fixed left-0 top-0 h-full w-80 bg-white dark:bg-gray-900 shadow-2xl border-r border-gray-200 dark:border-gray-700 rounded-tr-3xl rounded-br-3xl overflow-hidden" 
         style={{ 
-          transform: isClosing ? 'translateX(100%)' : 'translateX(0)',
+          transform: isClosing ? 'translateX(-100%)' : 'translateX(0)',
           transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)',
-          animation: isOpen && !isClosing ? 'slideInFromRight 0.3s ease-out' : undefined
+          animation: isOpen && !isClosing ? 'slideInFromLeft 0.3s ease-out' : undefined
         }} 
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-6">
+        <div className="p-6 overflow-y-auto max-h-[100dvh]">
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-semibold">Features</h2>
@@ -126,28 +133,57 @@ export function FeaturesSidebar({
             </Button>
           </div>
 
-          {/* Features List */}
+          {/* Categories - click to expand/collapse */}
           <div className="space-y-2">
-            {features.map((feature) => {
-              const Icon = feature.icon;
+            {categories.map((category) => {
+              const CategoryIcon = category.icon;
+              const isExpanded = expandedCategories.has(category.id);
               return (
-                <Card 
-                  key={feature.id}
-                  className="p-4 cursor-pointer hover:shadow-md transition-all rounded-full" 
-                  onClick={() => handleFeatureClick(feature.id)}
-                >
-                  <div className="flex items-center space-x-3">
-                    <div 
-                      className="w-10 h-10 rounded-full flex items-center justify-center"
-                      style={{ backgroundColor: `${feature.color}20` }}
+                <div key={category.id} className="space-y-1">
+                  <Card
+                    className="p-3 cursor-pointer hover:shadow-md transition-all rounded-xl flex items-center gap-3"
+                    onClick={() => toggleCategory(category.id)}
+                  >
+                    <div
+                      className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: `${category.color}20` }}
                     >
-                      <Icon className="w-5 h-5" style={{ color: feature.color }} />
+                      <CategoryIcon className="w-5 h-5" style={{ color: category.color }} />
                     </div>
-                    <div className="flex-1">
-                      <h3 className="font-medium">{feature.name}</h3>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium">{category.name}</h3>
                     </div>
-                  </div>
-                </Card>
+                    {isExpanded ? (
+                      <ChevronDown className="w-5 h-5 text-muted-foreground shrink-0" />
+                    ) : (
+                      <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
+                    )}
+                  </Card>
+                  {isExpanded && (
+                    <div className="ml-4 pl-3 border-l-2 border-muted/50 space-y-1.5 mt-1.5">
+                      {category.features.map((feature) => {
+                        const Icon = feature.icon;
+                        return (
+                          <Card
+                            key={feature.id}
+                            className="p-3 cursor-pointer hover:shadow-md transition-all rounded-xl"
+                            onClick={() => handleFeatureClick(feature.id)}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div
+                                className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+                                style={{ backgroundColor: `${feature.color}20` }}
+                              >
+                                <Icon className="w-4 h-4" style={{ color: feature.color }} />
+                              </div>
+                              <span className="font-medium text-sm">{feature.name}</span>
+                            </div>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>

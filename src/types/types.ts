@@ -48,4 +48,6 @@ export interface Task {
   breakTimes?: { start: string; end: string }[]; // For work tasks
   classId?: string; // For school tasks
   classroom?: string; // For school tasks
+  reminderId?: string; // Link to reminder when task was imported from Reminders
+  location?: string; // Location/place for the task
 }

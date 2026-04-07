@@ -15,6 +15,7 @@ interface UniversalDialogProps {
   saveLabel?: string;
   cancelLabel?: string;
   hideDefaultFooter?: boolean;
+  hideHeader?: boolean; // When true, do not render the default header (title + close)
   scrollable?: boolean; // Enable scrolling for long content
   infoContent?: ReactNode; // Info content to show in info dialog
   infoTitle?: string; // Title for info dialog
@@ -32,6 +33,7 @@ export default function UniversalDialog({
   saveLabel = "Save",
   cancelLabel = "Cancel",
   hideDefaultFooter = false,
+  hideHeader = false,
   scrollable = true,
   infoContent,
   infoTitle,
@@ -42,6 +44,7 @@ export default function UniversalDialog({
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className={`max-w-md ${scrollable ? 'max-h-[90vh] overflow-y-auto' : ''} [&>button]:hidden`}>
+          {!hideHeader && (
           <DialogHeader className="relative">
             <div className="flex items-center justify-between gap-2">
               <div className="flex-1">
@@ -72,6 +75,7 @@ export default function UniversalDialog({
               </div>
             </div>
         </DialogHeader>
+          )}
         
         <div className="space-y-4 py-4">
           {children}

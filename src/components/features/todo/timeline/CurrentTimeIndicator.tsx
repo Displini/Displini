@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Clock } from 'lucide-react';
 import { calculatePosition, TimelineBounds } from '../utils/timelineCalculations';
 import { formatTimeString, getCurrentTime } from '@/lib/timeUtils';
@@ -11,11 +11,11 @@ const CANDY_CONE_STRIPE_PATTERN = 12;
 const CANDY_CONE_MIN_HEIGHT = 4;
 const CANDY_CONE_OPACITY = 0.8;
 const TIMELINE_BAR_CENTER_OFFSET = 4;
-const ANIMATION_DURATION = 0.5;
 const BELOW_TIMELINE_OFFSET = 16;
+const COMPLETION_FILL_ANIMATION_MS = 650;
 
-// Time window (in ms) to consider a task as "just completed" for animation
-const RECENTLY_COMPLETED_THRESHOLD_MS = 10000; // Increased to 10 seconds for debugging
+// Module-level: persists across date switches (Todo page remounts timeline via key)
+const hasAnimatedCompletionSet = new Set<string>();
 
 interface PositionedGroup {
   group: TaskGroup;
@@ -56,21 +56,16 @@ export function CurrentTimeIndicator({
   currentPosPx = 0,
   pxPerMinute = 0,
 }: CurrentTimeIndicatorProps) {
-  // ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS
-  // Track which task IDs have already been animated (to prevent re-animating on re-renders)
-  const animatedTaskIdsRef = useRef<Set<string>>(new Set());
-  
-  // Use state to track segments that are currently animating
-  const [animatingSegments, setAnimatingSegments] = useState<Map<string, {
-    startPx: number;
-    heightPx: number;
-    taskId: string;
-    animationKey: string;
-  }>>(new Map());
-  
+  const [, setTick] = useState(0);
+  const scheduledCompletionsRef = useRef<string>('');
+  const lastCompletionSegmentsRef = useRef<Array<{ taskId: string; startPx: number; heightPx: number; color: string; completedAt: string }>>([]);
+  const [uncompleteSegmentsToShow, setUncompleteSegmentsToShow] = useState<Array<{ taskId: string; startPx: number; heightPx: number; color: string }>>([]);
+  const [animatingSegmentKeys, setAnimatingSegmentKeys] = useState<Set<string>>(new Set());
   const currentTime = propCurrentTime || formatTimeString(getCurrentTime());
   const currentTimeMinutes = timeToMinutes(currentTime);
-  
+  const now = getCurrentTime();
+  const currentMinWithSec = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+
   // Get user's primary color from CSS variable
   const primaryColor = typeof window !== 'undefined' 
     ? getComputedStyle(document.documentElement).getPropertyValue('--primary').trim()
@@ -89,45 +84,43 @@ export function CurrentTimeIndicator({
     isCompleted: boolean;
     completedAt?: string;
   }> = [];
-  
+  const completionSegments: Array<{ taskId: string; startPx: number; heightPx: number; color: string; completedAt: string }> = [];
+
   if (isToday && positionedGroups.length > 0 && timelineHeight > 0) {
     positionedGroups.forEach(({ group, topPx, heightPx }) => {
       // For groups with multiple tasks, calculate each task's position within the group
       const tasksCount = group.tasks?.length || 0;
-      
+
       group.tasks?.forEach((t, taskIndex) => {
         if (!t.time) return;
         if (['medication', 'water', 'sleep'].includes(t.source || '')) return;
-        
+
         const start = timeToMinutes(t.time);
         const hasNoEndTime = !t.endTime;
         const end = hasNoEndTime ? start + 30 : timeToMinutes(t.endTime!);
-        const isOverdue = hasNoEndTime 
-          ? currentTimeMinutes >= start
-          : currentTimeMinutes > end;
-        
+        const isOverdue = hasNoEndTime
+          ? currentMinWithSec >= start
+          : currentMinWithSec > end;
+
         // Use the group's positioned topPx and heightPx to match the container
         // For multiple tasks in a group, divide the height proportionally
         let taskTopPx: number;
         let taskHeightPx: number;
-        
+
         if (tasksCount === 1) {
-          // Single task - use the full group dimensions
           taskTopPx = topPx;
           taskHeightPx = heightPx;
         } else {
-          // Multiple tasks - calculate this task's portion
-          // Subtract padding (p-2 = 8px) and gaps (gap-2 = 8px per gap)
-          const padding = 8; // p-2
-          const gapSize = 8; // gap-2
+          const padding = 8;
+          const gapSize = 8;
           const totalGaps = (tasksCount - 1) * gapSize;
           const availableHeight = heightPx - (padding * 2) - totalGaps;
           const perTaskHeight = Math.max(CANDY_CONE_MIN_HEIGHT, availableHeight / tasksCount);
-          
+
           taskTopPx = topPx + padding + (taskIndex * (perTaskHeight + gapSize));
           taskHeightPx = perTaskHeight;
         }
-        
+
         if (taskHeightPx > 0 && taskTopPx >= 0) {
           candyConeSegments.push({
             taskId: t.id,
@@ -135,174 +128,79 @@ export function CurrentTimeIndicator({
             heightPx: taskHeightPx,
             isOverdue,
             isCompleted: t.completed || false,
-            completedAt: t.completedAt 
+            completedAt: t.completedAt
               ? (typeof t.completedAt === 'string' ? t.completedAt : t.completedAt.toISOString())
               : undefined,
           });
+          // Only show completion bar / fill animation for tasks that are in the past (overdue)
+          if (t.completed && t.completedAt && isOverdue) {
+            completionSegments.push({
+              taskId: t.id,
+              startPx: taskTopPx,
+              heightPx: taskHeightPx,
+              color: t.color || 'hsl(var(--primary))',
+              completedAt: typeof t.completedAt === 'string' ? t.completedAt : t.completedAt.toISOString(),
+            });
+          }
         }
       });
     });
   }
-  
-  // Effect to handle animations for newly completed tasks
+
+  // Schedule a single re-render 650ms after we see a new completion, so candy cone hides only after the fill animation finishes
+  const completionKeys = completionSegments.map((s) => `${s.taskId}-${s.completedAt}`).sort().join(',');
   useEffect(() => {
-    if (!isToday) return;
+    if (completionSegments.length === 0) return;
+    if (completionKeys === scheduledCompletionsRef.current) return;
+    scheduledCompletionsRef.current = completionKeys;
+    const id = setTimeout(() => setTick((n) => n + 1), COMPLETION_FILL_ANIMATION_MS);
+    return () => clearTimeout(id);
+  }, [completionKeys, completionSegments.length]);
 
-    const now = Date.now();
+  // Detect unmarked tasks: show reverse (unfill) animation for 650ms, then keep ref in sync
+  useEffect(() => {
+    const prev = lastCompletionSegmentsRef.current;
+    const currentIds = new Set(completionSegments.map((s) => s.taskId));
+    const uncomplete = prev.filter((p) => !currentIds.has(p.taskId));
+    if (uncomplete.length > 0) {
+      setUncompleteSegmentsToShow((prevSegs) => [
+        ...prevSegs.filter((s) => !uncomplete.some((u) => u.taskId === s.taskId)),
+        ...uncomplete.map(({ taskId, startPx, heightPx, color }) => ({ taskId, startPx, heightPx, color })),
+      ]);
+      const id = setTimeout(() => {
+        setUncompleteSegmentsToShow((prevSegs) =>
+          prevSegs.filter((s) => !uncomplete.some((u) => u.taskId === s.taskId))
+        );
+      }, COMPLETION_FILL_ANIMATION_MS);
+      lastCompletionSegmentsRef.current = completionSegments.map((s) => ({ ...s }));
+      return () => clearTimeout(id);
+    }
+    lastCompletionSegmentsRef.current = completionSegments.map((s) => ({ ...s }));
+  }, [completionKeys, completionSegments.length]);
 
-    console.log('🎯 Animation effect triggered:', {
-      isToday,
-      candyConeSegmentsCount: candyConeSegments.length,
-      completedSegmentsCount: candyConeSegments.filter(s => s.isCompleted).length,
-      animatingSegmentsCount: animatingSegments.size,
-    });
-
-    setAnimatingSegments(prev => {
-      const updated = new Map(prev);
-
-      // Get current completed task IDs
-      const currentCompletedTaskIds = new Set(
-        candyConeSegments
-          .filter(s => s.isCompleted)
-          .map(s => s.taskId)
-      );
-
-      // Remove segments for tasks that are no longer completed (unmarked)
-      prev.forEach((segment, key) => {
-        if (!currentCompletedTaskIds.has(segment.taskId)) {
-          updated.delete(key);
-          animatedTaskIdsRef.current.delete(segment.taskId);
-        }
-      });
-      
-      // Add segments for tasks that were JUST completed AND were overdue (had candy cone)
-      candyConeSegments.forEach(segment => {
-        console.log('🔍 Checking segment for animation:', {
-          taskId: segment.taskId,
-          isCompleted: segment.isCompleted,
-          hasCompletedAt: !!segment.completedAt,
-          startPx: segment.startPx,
-          heightPx: segment.heightPx,
-        });
-
-        if (!segment.isCompleted) {
-          console.log('❌ Skipping - not completed');
-          return;
-        }
-        if (!segment.completedAt) {
-          console.log('❌ Skipping - no completedAt timestamp');
-          return;
-        }
-
-        // Skip if already animated this task
-        if (animatedTaskIdsRef.current.has(segment.taskId)) {
-          console.log('❌ Skipping - already animated');
-          return;
-        }
-
-        // Check if this task was completed recently (within threshold)
-        const completedAt = segment.completedAt as string;
-        const completedAtMs = new Date(completedAt).getTime();
-        const timeSinceCompletion = now - completedAtMs;
-
-        console.log('⏰ Completion timing:', {
-          completedAt,
-          completedAtMs,
-          now,
-          timeSinceCompletion,
-          threshold: RECENTLY_COMPLETED_THRESHOLD_MS,
-          isRecent: timeSinceCompletion <= RECENTLY_COMPLETED_THRESHOLD_MS,
-        });
-
-        // Only animate if completed within the last few seconds
-        if (timeSinceCompletion > RECENTLY_COMPLETED_THRESHOLD_MS) {
-          console.log('❌ Skipping - completed too long ago, marking as animated');
-          // Task was completed too long ago - mark as already animated
-          animatedTaskIdsRef.current.add(segment.taskId);
-          return;
-        }
-
-        // Check if already animating
-        const animatingTaskIds = new Set(Array.from(prev.values()).map(s => s.taskId));
-        if (animatingTaskIds.has(segment.taskId)) {
-          console.log('❌ Skipping - already animating');
-          return;
-        }
-
-        // CRITICAL: Only animate if the task WAS OVERDUE when completed (had candy cone showing)
-        // This means we need to check if the completion time was after the task's due time
-        const task = segment; // segment contains task info
-        const completedAtDate = new Date(completedAt);
-        const completedAtMinutes = completedAtDate.getHours() * 60 + completedAtDate.getMinutes();
-
-        // Find the task's time info to determine if it was overdue when completed
-        // We need to get the original task data from the positionedGroups
-        let wasOverdueWhenCompleted = false;
-        for (const { group } of positionedGroups) {
-          const foundTask = group.tasks?.find(t => t.id === segment.taskId);
-          if (foundTask && foundTask.time) {
-            const start = timeToMinutes(foundTask.time);
-            const hasNoEndTime = !foundTask.endTime;
-            const end = hasNoEndTime ? start + 30 : timeToMinutes(foundTask.endTime!);
-
-            console.log('📅 Checking overdue status:', {
-              taskId: segment.taskId,
-              foundTaskTime: foundTask.time,
-              start,
-              end,
-              hasNoEndTime,
-              completedAtMinutes,
-              completedAtDate: completedAtDate.toISOString(),
-            });
-
-            // Task was overdue if completion time was after the task's end time
-            if (hasNoEndTime) {
-              wasOverdueWhenCompleted = completedAtMinutes >= start;
-            } else {
-              wasOverdueWhenCompleted = completedAtMinutes > end;
-            }
-
-            console.log('⚠️ Overdue result:', {
-              wasOverdueWhenCompleted,
-              completedAtMinutes,
-              taskEndMinutes: hasNoEndTime ? start : end,
-            });
-            break;
-          }
-        }
-
-        // Only animate if the task was overdue when completed (had candy cone pattern)
-        if (!wasOverdueWhenCompleted) {
-          console.log('❌ Skipping - task was not overdue when completed');
-          // Task was completed on time - no animation needed
-          animatedTaskIdsRef.current.add(segment.taskId);
-          return;
-        }
-
-        console.log('🎉 TRIGGERING ANIMATION for task:', segment.taskId);
-
-        // Mark as animated
-        animatedTaskIdsRef.current.add(segment.taskId);
-
-        const animationKey = `fill-${segment.taskId}-${completedAt}`;
-
-        // Add to animating segments - only for this specific task's area
-        updated.set(animationKey, {
-          startPx: segment.startPx,
-          heightPx: segment.heightPx,
-          taskId: segment.taskId,
-          animationKey,
+  // Trigger fill animation on next frame so initial scaleY(0) is painted first (fixes broken fill)
+  useEffect(() => {
+    if (completionSegments.length === 0) return;
+    const keysToAnimate = completionSegments
+      .filter((seg) => {
+        const key = `${seg.taskId}-${seg.completedAt}`;
+        const elapsed = Date.now() - new Date(seg.completedAt).getTime();
+        return elapsed < COMPLETION_FILL_ANIMATION_MS && !hasAnimatedCompletionSet.has(key);
+      })
+      .map((seg) => `${seg.taskId}-${seg.completedAt}`);
+    if (keysToAnimate.length === 0) return;
+    const rafId = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setAnimatingSegmentKeys((prev) => {
+          const next = new Set(prev);
+          keysToAnimate.forEach((k) => next.add(k));
+          return next;
         });
       });
-      
-      return updated;
     });
-  }, [isToday, candyConeSegments.map(s => `${s.taskId}-${s.isCompleted}`).join(',')]);
-  
-  // Convert state map to array for rendering
-  const animatingSegmentsList = Array.from(animatingSegments.values());
-  
-  // Early return AFTER all hooks
+    return () => cancelAnimationFrame(rafId);
+  }, [completionKeys, completionSegments.length]);
+
   if (!isToday) return null;
   
   // Calculate position for current time indicator
@@ -351,27 +249,70 @@ export function CurrentTimeIndicator({
   const validFillPercentage = Math.max(0, Math.min(maxFillPercent, fillPercentage));
   const offset = Math.max(0, Math.min(100, startOffsetPercent));
   const adjustedHeight = Math.max(0, validFillPercentage - offset);
+
+  // Clip liquid fill around overdue completed task rows so only the completion bar shows there (no blue + bar)
+  const liquidTopPx = (offset / 100) * timelineHeight;
+  const liquidHeightPx = (adjustedHeight / 100) * timelineHeight;
+  const liquidBottomPx = liquidTopPx + liquidHeightPx;
+  const completedSegments = candyConeSegments
+    .filter((s) => s.isCompleted && s.heightPx > 0 && s.isOverdue)
+    .map((s) => ({ start: s.startPx, end: s.startPx + s.heightPx }))
+    .sort((a, b) => a.start - b.start);
+  const gaps: Array<{ top: number; height: number }> = [];
+  let cursor = liquidTopPx;
+  for (const seg of completedSegments) {
+    if (seg.end <= cursor || seg.start >= liquidBottomPx) continue;
+    const gapStart = cursor;
+    const gapEnd = Math.min(seg.start, liquidBottomPx);
+    if (gapEnd > gapStart) gaps.push({ top: gapStart, height: gapEnd - gapStart });
+    cursor = Math.max(cursor, seg.end);
+  }
+  if (cursor < liquidBottomPx) {
+    gaps.push({ top: cursor, height: liquidBottomPx - cursor });
+  }
+  const showSingleLiquidFill = completedSegments.length === 0;
   
   return (
     <>
-      {/* Main liquid fill - shows current time progress */}
-      {adjustedHeight > 0 && (
-        <div
-          className="absolute left-0 w-2"
-          style={{
-            top: `${offset}%`,
-            height: `${adjustedHeight}%`,
-            backgroundColor: baseFillColor,
-            borderRadius: validFillPercentage === 100 ? '0' : '0 0 9999px 9999px',
-            pointerEvents: 'none',
-            zIndex: 0,
-          }}
-        />
-      )}
+      {/* Main liquid fill - shows current time progress; clipped so completed task rows show only their completion bar */}
+      {adjustedHeight > 0 &&
+        (showSingleLiquidFill ? (
+          <div
+            className="absolute left-0 w-2 liquid-fill-bar"
+            style={{
+              top: `${offset}%`,
+              height: `${adjustedHeight}%`,
+              backgroundColor: baseFillColor,
+              pointerEvents: 'none',
+              zIndex: 0,
+            }}
+          />
+        ) : (
+          <>
+            {gaps.map((gap, i) => (
+              <div
+                key={i}
+                className="absolute left-0 w-2 pointer-events-none liquid-fill-bar"
+                style={{
+                  top: `${gap.top}px`,
+                  height: `${gap.height}px`,
+                  backgroundColor: baseFillColor,
+                  zIndex: 0,
+                }}
+              />
+            ))}
+          </>
+        ))}
       
-      {/* Candy cone pattern for overdue INCOMPLETE tasks only */}
+      {/* Candy cone: show for overdue incomplete; for just-completed, keep visible until fill animation ends (650ms). Grey timeline bar shows through; opacity stays constant during animation. */}
       {candyConeSegments
-        .filter(segment => !segment.isCompleted && segment.isOverdue)
+        .filter((segment) => {
+          // Only show candy cone for overdue incomplete, or just-completed (within 650ms) and in the past
+          if (!segment.isCompleted) return segment.isOverdue;
+          if (!segment.completedAt || !segment.isOverdue) return false;
+          const elapsed = Date.now() - new Date(segment.completedAt).getTime();
+          return elapsed < COMPLETION_FILL_ANIMATION_MS;
+        })
         .map((segment) => (
           <div
             key={`candy-${segment.taskId}`}
@@ -386,83 +327,117 @@ export function CurrentTimeIndicator({
                 hsl(var(--background)) ${CANDY_CONE_STRIPE_SIZE}px,
                 hsl(var(--background)) ${CANDY_CONE_STRIPE_PATTERN}px
               )`,
+              backgroundAttachment: 'local',
+              backgroundPosition: '0 0',
               opacity: CANDY_CONE_OPACITY,
               zIndex: 1,
               minHeight: `${CANDY_CONE_MIN_HEIGHT}px`,
+              contain: 'layout style paint',
             }}
           />
         ))}
-      
-      {/* Animated fill for tasks that were JUST marked complete */}
-      {animatingSegmentsList.map((segment) => {
-        console.log('🎨 Rendering FillAnimation component:', {
-          taskId: segment.taskId,
-          animationKey: segment.animationKey,
-          top: segment.startPx,
-          height: segment.heightPx,
-          color: colorStyle,
-        });
 
+      {/* Completion bars: no wrapper background so candy cone shows until fill animates over it.
+          Only animate if just completed (within 650ms) AND we haven't already animated it (prevents retrigger on date switch). */}
+      {completionSegments.map((seg) => {
+        const segKey = `${seg.taskId}-${seg.completedAt}`;
+        const elapsed = Date.now() - new Date(seg.completedAt).getTime();
+        const isJustCompleted = elapsed < COMPLETION_FILL_ANIMATION_MS;
+        const alreadyAnimated = hasAnimatedCompletionSet.has(segKey);
+        const shouldAnimate = isJustCompleted && !alreadyAnimated;
+        const useInitial = shouldAnimate && !animatingSegmentKeys.has(segKey);
+        const useAnimation = shouldAnimate && animatingSegmentKeys.has(segKey);
+        if (useAnimation) hasAnimatedCompletionSet.add(segKey);
+        const fillClass = useInitial ? 'task-complete-fill-bar-initial' : useAnimation ? 'task-complete-fill-bar' : 'task-complete-fill-bar-static';
         return (
-          <FillAnimation
-            key={segment.animationKey}
-            top={segment.startPx}
-            height={segment.heightPx}
-            color={colorStyle}
-            taskId={segment.taskId}
-            animationKey={segment.animationKey}
-            onAnimationComplete={() => {
-              console.log('✅ Animation completed for task:', segment.taskId);
-              setAnimatingSegments(prev => {
-                const updated = new Map(prev);
-                updated.delete(segment.animationKey);
-                return updated;
-              });
+          <div
+            key={segKey}
+            className="absolute left-0 w-2 overflow-hidden pointer-events-none"
+            style={{
+              top: `${seg.startPx}px`,
+              height: `${seg.heightPx}px`,
+              zIndex: 5,
+              contain: 'layout style',
             }}
-          />
+          >
+            <div
+              className={fillClass}
+              style={{
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                width: '100%',
+                height: '100%',
+                backgroundColor: seg.color,
+              }}
+            />
+          </div>
         );
       })}
-      
-      {/* Current time marker dot */}
-      {showBelowTimeline ? null : (
+
+      {/* Reverse (uncomplete) bars: animate from full to empty over candy cone */}
+      {uncompleteSegmentsToShow.map((seg) => (
         <div
-          className="absolute flex items-center z-40"
+          key={`uncomplete-${seg.taskId}`}
+          className="absolute left-0 w-2 overflow-hidden pointer-events-none"
           style={{
-            left: `${TIMELINE_BAR_CENTER_OFFSET}px`,
-            top: `${position}%`,
-            transform: 'translate(-50%, -50%)',
+            top: `${seg.startPx}px`,
+            height: `${seg.heightPx}px`,
+            zIndex: 5,
+            contain: 'layout style',
           }}
         >
           <div
-            className="w-2 h-6 rounded-full"
+            className="task-complete-fill-bar-reverse"
             style={{
-              backgroundColor: colorStyle,
-              border: 'none',
-              boxShadow: 'none',
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              width: '100%',
+              height: '100%',
+              backgroundColor: seg.color,
             }}
           />
-          
+        </div>
+      ))}
+
+      {/* Current time: dot on the bar, icon + text on the left (gutter) with rounded bg */}
+      {showBelowTimeline ? null : (
+        <>
           <div
-            className="absolute text-[13px] font-semibold whitespace-nowrap z-50 flex items-center gap-1"
+            className="absolute flex items-center z-40"
             style={{
-              color: colorStyle,
-              pointerEvents: 'none',
-              transform: 'translateY(-50%)',
-              left: '-3.6rem',
-              textAlign: 'right',
-              minWidth: '3rem',
-              justifyContent: 'flex-end',
+              left: `${TIMELINE_BAR_CENTER_OFFSET}px`,
+              top: `${position}%`,
+              transform: 'translate(-50%, -50%)',
             }}
           >
-            <Clock className="w-3 h-3" />
-            <span>{currentTime}</span>
+            <div
+              className="w-2 h-6 rounded-full flex-shrink-0"
+              style={{
+                backgroundColor: colorStyle,
+                border: 'none',
+                boxShadow: 'none',
+              }}
+            />
+            <div
+              className="absolute text-[13px] font-semibold whitespace-nowrap flex items-center gap-1 rounded-full px-2 py-0.5 right-full mr-1"
+              style={{
+                color: colorStyle,
+                pointerEvents: 'none',
+                backgroundColor: 'hsl(var(--background))',
+              }}
+            >
+              <Clock className="w-3 h-3 flex-shrink-0" />
+              <span>{currentTime}</span>
+            </div>
           </div>
-        </div>
+        </>
       )}
 
       {showBelowTimeline && (
         <div
-          className="absolute flex flex-col items-center z-30"
+          className="absolute flex flex-col items-center z-30 rounded-full px-2 py-1"
           style={{
             left: `${TIMELINE_BAR_CENTER_OFFSET}px`,
             top: timelineHeight > 0 && visualEndPx > 0 
@@ -470,10 +445,11 @@ export function CurrentTimeIndicator({
               : `${Math.min(100, (lastTaskEndTime !== undefined ? calculatePosition(minutesToTime(lastTaskEndTime), bounds) : 100) + 4)}%`,
             marginTop: '0px',
             transform: 'translateX(-50%)',
+            backgroundColor: 'hsl(var(--background))',
           }}
         >
           <div
-            className="text-xs font-semibold whitespace-nowrap z-50 flex items-center gap-1"
+            className="text-xs font-semibold whitespace-nowrap flex items-center gap-1"
             style={{
               color: colorStyle,
               pointerEvents: 'none',
@@ -485,117 +461,5 @@ export function CurrentTimeIndicator({
         </div>
       )}
     </>
-  );
-}
-
-// Animation component for fill effect when task is completed
-function FillAnimation({
-  top,
-  height,
-  color,
-  taskId,
-  animationKey,
-  onAnimationComplete
-}: {
-  top: number;
-  height: number;
-  color: string;
-  taskId: string;
-  animationKey: string;
-  onAnimationComplete?: () => void;
-}) {
-  const [shouldAnimate, setShouldAnimate] = useState(false);
-  const divRef = useRef<HTMLDivElement>(null);
-  const hasCompletedRef = useRef(false);
-
-  console.log('🎬 FillAnimation mounted:', {
-    taskId,
-    animationKey,
-    top,
-    height,
-    color,
-    shouldAnimate,
-  });
-
-  useLayoutEffect(() => {
-    console.log('🔄 FillAnimation useLayoutEffect triggered:', {
-      taskId,
-      animationKey,
-    });
-
-    setShouldAnimate(false);
-    hasCompletedRef.current = false;
-    
-    const timer = setTimeout(() => {
-      console.log('⏳ FillAnimation timer fired, preparing animation:', {
-        taskId,
-        animationKey,
-      });
-
-      if (divRef.current) {
-        void divRef.current.offsetHeight; // Force reflow
-        console.log('🔄 Forced reflow for task:', taskId);
-      }
-
-      requestAnimationFrame(() => {
-        console.log('🎭 Starting animation for task:', taskId);
-        setShouldAnimate(true);
-
-        if (onAnimationComplete) {
-          setTimeout(() => {
-            if (!hasCompletedRef.current) {
-              hasCompletedRef.current = true;
-              console.log('🏁 Animation timeout completed for task:', taskId);
-              onAnimationComplete();
-            }
-          }, (ANIMATION_DURATION * 1000) + 100);
-        }
-      });
-    }, 20);
-    
-    return () => {
-      console.log('🧹 Cleaning up animation for task:', taskId);
-      clearTimeout(timer);
-      setShouldAnimate(false);
-    };
-  }, [animationKey, onAnimationComplete]);
-  
-  const handleAnimationEnd = useCallback((e: React.AnimationEvent<HTMLDivElement>) => {
-    if (e.animationName === 'fillFromTopScaleY' && !hasCompletedRef.current) {
-      hasCompletedRef.current = true;
-      if (onAnimationComplete) {
-        setTimeout(onAnimationComplete, 100);
-      }
-    }
-  }, [onAnimationComplete]);
-  
-  return (
-    <div
-      className="absolute left-0 w-2"
-      style={{
-        top: `${top}px`,
-        height: `${height}px`,
-        zIndex: 3,
-        overflow: 'hidden',
-        pointerEvents: 'none',
-      }}
-      data-task-id={taskId}
-    >
-      <div
-        ref={divRef}
-        className={shouldAnimate ? 'fill-animation-scaleY' : ''}
-        style={{
-          position: 'absolute',
-          left: 0,
-          top: 0,
-          width: '100%',
-          height: '100%',
-          backgroundColor: color,
-          transformOrigin: 'top',
-          transform: 'scaleY(0)',
-        }}
-        onAnimationEnd={handleAnimationEnd}
-      />
-    </div>
   );
 }

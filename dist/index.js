@@ -155,14 +155,16 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
   const port = Number(process.env.PORT) || 4e3;
+  const host = process.env.HOST || "127.0.0.1";
   server.listen(
     {
       port,
-      host: "0.0.0.0",
-      reusePort: true
+      host,
+      // reusePort can fail in constrained environments; leave undefined unless explicitly enabled
+      reusePort: process.env.REUSE_PORT === "true" ? true : void 0
     },
     () => {
-      log(`serving on port ${port}`);
+      log(`serving on http://${host}:${port}`);
     }
   );
 })();

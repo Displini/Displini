@@ -1,20 +1,26 @@
-import { useState, useEffect, useMemo, useCallback, lazy, Suspense } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspense } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useLocation } from "react-router-dom";
 import { SEO } from "@/components/general/SEO";
 import CalendarView from "@/components/features/calendar/CalendarView";
-import EventList from "@/components/features/calendar/EventList";
-import { DateCarousel } from "@/components/general/DateCarousel";
-import { PageHeader } from "@/components/general";
+import ListView from "@/components/features/calendar/ListView";
+import DayView from "@/components/features/calendar/DayView";
+import WeekView from "@/components/features/calendar/WeekView";
+import { CalendarHeader, type CalendarViewMode } from "@/components/features/calendar/CalendarHeader";
+import { PageHeader, FeaturesSidebar } from "@/components/general";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Calendar as DatePicker } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Card } from "@/components/ui/card";
-import { addDays, isSameDay, isWithinInterval, format, startOfWeek, endOfWeek, eachDayOfInterval, startOfMonth, endOfMonth } from "date-fns";
-import { Calendar as CalendarIcon, Clock, ChevronLeft, ChevronRight, Plus, Trash2, BarChart3, Settings2, Menu, Moon, Sun, X, Heart, Pill, Droplets, Briefcase, GraduationCap, BookOpen } from "lucide-react";
-import type { CalendarEvent } from "@/types/calendar";
+import { addDays, isSameDay, format, addMonths, subMonths, startOfMonth, startOfWeek, addYears } from "date-fns";
+import { Calendar as CalendarIcon, Clock, ChevronLeft, ChevronRight, Plus, Trash2, Menu, Search, CalendarDays, Repeat, Bell } from "lucide-react";
+import type { CalendarEvent, CalendarEventRepeat, CalendarEventAlert } from "@/types/calendar";
 import { useOptimizedLocalStorage } from "@/hooks/useLocalStorage";
-import { useDarkMode } from "@/hooks/useDarkMode";
 
 // Lazy load heavy dialog
 const MonthlyStatsModal = lazy(() => import("@/components/general/MonthlyStatsModal"));
@@ -26,10 +32,10 @@ interface CyclePeriod {
   periodDuration?: number;
 }
 
-type ViewMode = "month" | "week" | "day" | "list";
+type ViewMode = CalendarViewMode;
 
 export default function Calendar() {
-  const { isDark, toggle: toggleDarkMode } = useDarkMode();
+  const location = useLocation();
   const [showStats, setShowStats] = useState(false);
   const [showMenuDialog, setShowMenuDialog] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
@@ -37,7 +43,8 @@ export default function Calendar() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [showTodosInCalendar, setShowTodosInCalendar] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>("month");
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [newEventTitle, setNewEventTitle] = useState("");
   const [newEventStartTime, setNewEventStartTime] = useState("");
@@ -45,6 +52,13 @@ export default function Calendar() {
   const [newEventAllDay, setNewEventAllDay] = useState(false);
   const [newEventEmoji, setNewEventEmoji] = useState("📅");
   const [newEventLocation, setNewEventLocation] = useState("");
+  const [newEventDate, setNewEventDate] = useState<Date>(() => new Date());
+  const [newEventRepeat, setNewEventRepeat] = useState<CalendarEventRepeat>("none");
+  const [newEventAlert, setNewEventAlert] = useState<CalendarEventAlert>("none");
+  const [listShowJumpToCurrent, setListShowJumpToCurrent] = useState(false);
+  const listJumpToCurrentRef = useRef<(() => void) | null>(null);
+  const [monthShowJumpToCurrent, setMonthShowJumpToCurrent] = useState(false);
+  const monthJumpToCurrentRef = useRef<(() => void) | null>(null);
 
   // Use optimized localStorage with memoization
   const [storedEvents, setStoredEvents] = useOptimizedLocalStorage<CalendarEvent[]>("calendarEvents", [], {
@@ -59,6 +73,28 @@ export default function Calendar() {
       return JSON.stringify(eventsToSave);
     },
   });
+
+  // Always reset to current date when visiting or refreshing the calendar
+  useEffect(() => {
+    if (location.pathname === "/app/calendar") {
+      setSelectedDate(new Date());
+    }
+  }, [location.pathname]);
+
+  // Reset jump buttons when switching views
+  useEffect(() => {
+    if (viewMode !== "list") setListShowJumpToCurrent(false);
+    if (viewMode !== "month") setMonthShowJumpToCurrent(false);
+  }, [viewMode]);
+
+  // Reset add-event form when dialog opens and prefill with selectedDate
+  useEffect(() => {
+    if (isAddDialogOpen) {
+      setNewEventDate(selectedDate);
+      setNewEventRepeat("none");
+      setNewEventAlert("none");
+    }
+  }, [isAddDialogOpen, selectedDate]);
 
   useEffect(() => {
     const handleOpenAddEvent = () => {
@@ -223,28 +259,57 @@ export default function Calendar() {
 
   const handleSubmitEvent = useCallback(() => {
     if (newEventTitle && (newEventStartTime || newEventAllDay)) {
-      const newEvent = {
-        id: Date.now().toString(),
-        date: selectedDate,
+      const alertMins = newEventAlert === "none" ? undefined : parseInt(newEventAlert, 10);
+
+      const createEvent = (date: Date, idSuffix = ""): CalendarEvent => ({
+        id: `${Date.now()}${idSuffix}`,
+        date,
         title: newEventTitle,
         startTime: newEventAllDay ? undefined : newEventStartTime,
         endTime: newEventAllDay ? undefined : newEventEndTime,
         allDay: newEventAllDay,
         emoji: newEventEmoji,
         addToTodo: false,
-        type: 'event' as const,
+        type: "event",
         location: newEventLocation || undefined,
-      };
-      setEvents([...events, newEvent]);
+        repeat: newEventRepeat !== "none" ? newEventRepeat : undefined,
+        alertMinutesBefore: alertMins,
+      });
+
+      const eventsToAdd: CalendarEvent[] = [];
+
+      if (newEventRepeat === "none") {
+        eventsToAdd.push(createEvent(newEventDate));
+      } else {
+        const endDate = addMonths(newEventDate, 3);
+        let current = new Date(newEventDate);
+        let i = 0;
+        while (current <= endDate && i < 100) {
+          eventsToAdd.push(createEvent(new Date(current), `-${i}`));
+          if (newEventRepeat === "daily") current = addDays(current, 1);
+          else if (newEventRepeat === "weekly") current = addDays(current, 7);
+          else if (newEventRepeat === "monthly") current = addMonths(current, 1);
+          else if (newEventRepeat === "yearly") current = addYears(current, 1);
+          i++;
+        }
+      }
+
+      setEvents((prev) => [...prev, ...eventsToAdd]);
       setNewEventTitle("");
       setNewEventStartTime("");
       setNewEventEndTime("");
       setNewEventAllDay(false);
       setNewEventEmoji("📅");
       setNewEventLocation("");
+      setNewEventDate(new Date());
+      setNewEventRepeat("none");
+      setNewEventAlert("none");
       setIsAddDialogOpen(false);
     }
-  }, [selectedDate, events, newEventTitle, newEventStartTime, newEventEndTime, newEventAllDay, newEventEmoji, newEventLocation]);
+  }, [
+    newEventTitle, newEventStartTime, newEventEndTime, newEventAllDay, newEventEmoji, newEventLocation,
+    newEventDate, newEventRepeat, newEventAlert,
+  ]);
 
   const handleDeleteEvent = useCallback((id: string) => {
     setEvents(prevEvents => prevEvents.filter((e) => e.id !== id));
@@ -284,59 +349,27 @@ export default function Calendar() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="h-screen flex flex-col overflow-hidden bg-background">
       <SEO
         title="Calendar"
         description="View and manage your schedule"
         noindex={true}
       />
-      {/* Sticky Header */}
-      <PageHeader>
-        {/* Top Row - Actions */}
-        <div className="flex items-center justify-between mb-3">
-          <h1 className="text-lg font-semibold">
-            {format(selectedDate, 'MMMM d, yyyy')}
-          </h1>
-          <Button 
-            variant="ghost" 
-            size="icon"
-            onClick={toggleDarkMode}
-            aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-          >
-            {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="icon"
-            onClick={() => setShowMenuDialog(true)}
-          >
+      {/* Fixed Header - never scrolls away */}
+      <PageHeader fixed>
+        {/* Top Row - Menu | List Day Week Month | Search */}
+        <div className="flex items-center gap-2 mb-3">
+          <Button variant="ghost" size="icon" className="h-10 w-10 flex-shrink-0" onClick={() => setShowMenuDialog(true)}>
             <Menu className="w-5 h-5" />
           </Button>
-        </div>
-        
-        {/* Date Carousel */}
-        <DateCarousel 
-          selectedDate={selectedDate}
-          onDateChange={setSelectedDate}
-        />
-        
-        {/* View Mode Selector */}
-        <div className="grid grid-cols-4 gap-2 mt-3">
+          <div className="flex flex-1 justify-center gap-1.5">
           <Button
-            variant={viewMode === "month" ? "default" : "outline"}
+            variant={viewMode === "list" ? "default" : "outline"}
             size="sm"
-            onClick={() => setViewMode("month")}
+            onClick={() => setViewMode("list")}
             className="rounded-full"
           >
-            Month
-          </Button>
-          <Button
-            variant={viewMode === "week" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setViewMode("week")}
-            className="rounded-full"
-          >
-            Week
+            List
           </Button>
           <Button
             variant={viewMode === "day" ? "default" : "outline"}
@@ -347,244 +380,230 @@ export default function Calendar() {
             Day
           </Button>
           <Button
-            variant={viewMode === "list" ? "default" : "outline"}
+            variant={viewMode === "week" ? "default" : "outline"}
             size="sm"
-            onClick={() => setViewMode("list")}
+            onClick={() => setViewMode("week")}
             className="rounded-full"
           >
-            List
+            Week
+          </Button>
+          <Button
+            variant={viewMode === "month" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setViewMode("month")}
+            className="rounded-full"
+          >
+            Month
+          </Button>
+          </div>
+          <Button variant="ghost" size="icon" className="h-10 w-10 flex-shrink-0" onClick={() => setSearchOpen(true)} aria-label="Search">
+            <Search className="w-5 h-5" />
           </Button>
         </div>
-      </PageHeader>
 
-      <main className="px-4 py-6 space-y-6" style={{ paddingTop: '160px' }}>
-
-        {/* Month View */}
-        {viewMode === "month" && (
-          <>
-            <CalendarView
-              events={events}
-              onDateSelect={setSelectedDate}
-              onAddEvent={handleAddEvent}
+        {/* Date pills - hidden for List (month nav in header) and Month (scrollable in content) */}
+        {viewMode !== "month" && viewMode !== "list" && (
+          <div className="flex justify-center w-full">
+            <CalendarHeader
+              viewMode={viewMode}
               selectedDate={selectedDate}
+              onDateChange={setSelectedDate}
             />
-            <EventList
-              events={events}
-              selectedDate={selectedDate}
-              onDeleteEvent={handleDeleteEvent}
-              onToggleTodo={handleToggleTodo}
-            />
-          </>
+          </div>
         )}
-
-        {/* Week View */}
-        {viewMode === "week" && (
-          <Card className="p-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold">
-                Week of {format(startOfWeek(selectedDate), "MMM d")}
-              </h3>
-              <div className="flex gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setSelectedDate(addDays(selectedDate, -7))}
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setSelectedDate(addDays(selectedDate, 7))}
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-            
-            <div className="space-y-2">
-              {eachDayOfInterval({
-                start: startOfWeek(selectedDate),
-                end: endOfWeek(selectedDate)
-              }).map(day => {
-                const dayEvents = events.filter(e => isSameDay(e.date, day));
-                const isToday = isSameDay(day, new Date());
-                
-                return (
-                  <div key={day.toString()} className={`p-3 rounded-lg border ${isToday ? 'border-primary bg-primary/5' : 'border-muted'}`}>
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold">{format(day, "EEE")}</span>
-                        <span className="text-sm text-muted-foreground">{format(day, "MMM d")}</span>
-                        {isToday && <span className="text-xs px-2 py-0.5 rounded-full bg-primary text-primary-foreground">Today</span>}
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => {
-                          setSelectedDate(day);
-                          handleAddEvent();
-                        }}
-                      >
-                        <Plus className="w-3 h-3" />
-                      </Button>
-                    </div>
-                    {dayEvents.length > 0 ? (
-                      <div className="space-y-1">
-                        {dayEvents.map(event => (
-                          <div key={event.id} className="text-sm p-2 rounded bg-muted/50 flex items-center gap-2">
-                            <span>{event.emoji || '📅'}</span>
-                            <span className="flex-1 truncate">{event.title}</span>
-                            {!event.allDay && (event.startTime || event.time) && (
-                              <span className="text-xs text-muted-foreground">{event.startTime || event.time}</span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">No events</p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            
-            <Button onClick={handleAddEvent} className="w-full">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Event
-            </Button>
-          </Card>
-        )}
-
-        {/* Day View */}
-        {viewMode === "day" && (
-          <Card className="p-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold">
-                {format(selectedDate, "EEEE, MMM d, yyyy")}
-              </h3>
-              <div className="flex gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setSelectedDate(addDays(selectedDate, -1))}
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setSelectedDate(addDays(selectedDate, 1))}
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-
-            <EventList
-              events={events}
-              selectedDate={selectedDate}
-              onDeleteEvent={handleDeleteEvent}
-              onToggleTodo={handleToggleTodo}
-            />
-
-            <Button onClick={handleAddEvent} className="w-full">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Event
-            </Button>
-          </Card>
-        )}
-
-        {/* List View */}
+        {/* List view: month/year with arrows, Jump to current month centered below */}
         {viewMode === "list" && (
-          <div className="space-y-4">
-            <Card className="p-4">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold">All Events</h3>
-                <div className="text-sm text-muted-foreground">
-                  {events.filter(e => e.type !== 'period' && e.type !== 'todo').length} events
-                </div>
-              </div>
-              
-              <div className="space-y-3">
-                {events
-                  .filter(e => e.type !== 'period' && e.type !== 'todo')
-                  .sort((a, b) => a.date.getTime() - b.date.getTime())
-                  .map(event => (
-                    <div key={event.id} className="p-3 rounded-lg border hover:bg-muted/50 transition-colors">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-lg">{event.emoji || '📅'}</span>
-                            <span className="font-medium">{event.title}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <CalendarIcon className="w-3 h-3" />
-                            <span>{format(event.date, "EEE, MMM d, yyyy")}</span>
-                            {!event.allDay && (event.startTime || event.time) && (
-                              <>
-                                <Clock className="w-3 h-3 ml-2" />
-                                <span>{event.startTime || event.time}</span>
-                                {event.endTime && <span>- {event.endTime}</span>}
-                              </>
-                            )}
-                          </div>
-                          {event.location && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              📍 {event.location}
-                            </p>
-                          )}
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDeleteEvent(event.id)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                
-                {events.filter(e => e.type !== 'period' && e.type !== 'todo').length === 0 && (
-                  <p className="text-center text-muted-foreground py-8">No events scheduled</p>
-                )}
-              </div>
-            </Card>
+          <div className="flex flex-col items-center gap-2 mt-2">
+            <div className="flex items-center justify-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedDate(subMonths(startOfMonth(selectedDate), 1))}
+                className="h-8 w-8 p-0"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <span className="text-sm font-medium text-muted-foreground min-w-[140px] text-center">
+                {format(selectedDate, "MMMM yyyy")}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedDate(addMonths(startOfMonth(selectedDate), 1))}
+                className="h-8 w-8 p-0"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+            {listShowJumpToCurrent && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => listJumpToCurrentRef.current?.()}
+                className="gap-1.5 text-xs"
+              >
+                <CalendarDays className="w-3.5 h-3.5" />
+                Jump to current month
+              </Button>
+            )}
+          </div>
+        )}
 
-            {/* Reminders Section */}
-            <Card className="p-4">
-              <h3 className="text-lg font-semibold mb-4">📋 Reminders</h3>
-              <div className="space-y-2">
-                {reminders.map((reminder: any) => (
-                  <div key={reminder.id} className="p-3 rounded-lg border bg-muted/30">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-lg">{reminder.emoji || '🔔'}</span>
-                      <span className="font-medium">{reminder.title}</span>
-                    </div>
-                    {reminder.subtasks && reminder.subtasks.length > 0 && (
-                      <p className="text-xs text-muted-foreground pl-7">
-                        {reminder.subtasks.length} subtask{reminder.subtasks.length > 1 ? 's' : ''}
-                      </p>
-                    )}
-                  </div>
-                ))}
-                
-                {reminders.length === 0 && (
-                  <p className="text-center text-muted-foreground py-4 text-sm">
-                    No unscheduled reminders
-                  </p>
-                )}
-              </div>
-            </Card>
+        {/* Month view: Jump to current month in header (when scrolled past) */}
+        {viewMode === "month" && (
+          <div className="flex flex-col items-center gap-2 mt-2">
+            <span className="text-sm font-medium text-muted-foreground">
+              {format(selectedDate, "MMMM yyyy")}
+            </span>
+            {monthShowJumpToCurrent && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => monthJumpToCurrentRef.current?.()}
+                className="gap-1.5 text-xs"
+              >
+                <CalendarDays className="w-3.5 h-3.5" />
+                Jump to current month
+              </Button>
+            )}
+          </div>
+        )}
 
-            <Button onClick={handleAddEvent} className="w-full">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Event
+        {/* Day view: Jump to today in header (when not on today) */}
+        {viewMode === "day" && !isSameDay(selectedDate, new Date()) && (
+          <div className="flex justify-center mt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSelectedDate(new Date())}
+              className="gap-1.5 text-xs"
+            >
+              <CalendarDays className="w-3.5 h-3.5" />
+              Jump to today
             </Button>
           </div>
         )}
+
+        {/* Week view: Jump to current week in header (when not on current week) */}
+        {viewMode === "week" && (() => {
+          const today = new Date();
+          const selectedWeekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
+          const todayWeekStart = startOfWeek(today, { weekStartsOn: 1 });
+          const isCurrentWeek = selectedWeekStart.getTime() === todayWeekStart.getTime();
+          return !isCurrentWeek ? (
+            <div className="flex justify-center mt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectedDate(new Date())}
+                className="gap-1.5 text-xs"
+              >
+                <CalendarDays className="w-3.5 h-3.5" />
+                Jump to current week
+              </Button>
+            </div>
+          ) : null;
+        })()}
+      </PageHeader>
+
+      <main
+        className={`flex-1 min-h-0 px-4 py-6 pb-20 ${viewMode === "list" ? "flex flex-col overflow-hidden" : "overflow-auto space-y-6"}`}
+        style={{ paddingTop: viewMode === "month" ? "120px" : viewMode === "list" ? "144px" : "200px" }}
+      >
+
+        <AnimatePresence mode="wait">
+          {viewMode === "list" && (
+            <motion.div
+              key="list"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+              className="flex-1 min-h-0 flex flex-col"
+            >
+              <ListView
+                events={events.filter((e) => e.type !== "period" && e.type !== "todo")}
+                selectedDate={selectedDate}
+                onDateSelect={setSelectedDate}
+                onDeleteEvent={handleDeleteEvent}
+                onJumpToCurrentChange={(show, scrollFn) => {
+                  setListShowJumpToCurrent(show);
+                  listJumpToCurrentRef.current = scrollFn;
+                }}
+              />
+            </motion.div>
+          )}
+
+          {viewMode === "day" && (
+            <motion.div
+              key="day"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+            >
+              <DayView
+                events={events.filter((e) => e.type !== "period" && e.type !== "todo")}
+                selectedDate={selectedDate}
+                onDateChange={setSelectedDate}
+                onDeleteEvent={handleDeleteEvent}
+              />
+            </motion.div>
+          )}
+
+          {viewMode === "week" && (
+            <motion.div
+              key="week"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+            >
+              <WeekView
+                events={events.filter((e) => e.type !== "period" && e.type !== "todo")}
+                selectedDate={selectedDate}
+                onDateChange={setSelectedDate}
+                onDeleteEvent={handleDeleteEvent}
+              />
+            </motion.div>
+          )}
+
+          {viewMode === "month" && (
+            <motion.div
+              key="month"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+            >
+              <CalendarView
+                events={events}
+                onDateSelect={setSelectedDate}
+                onDeleteEvent={handleDeleteEvent}
+                onToggleTodo={handleToggleTodo}
+                selectedDate={selectedDate}
+                onJumpToCurrentChange={(show, scrollFn) => {
+                  setMonthShowJumpToCurrent(show);
+                  monthJumpToCurrentRef.current = scrollFn;
+                }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </main>
+
+      {/* Search Dialog */}
+      <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Search</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <Input placeholder="Search events..." className="w-full" />
+            <p className="text-xs text-muted-foreground mt-2">Quick search for events and reminders</p>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
         <DialogContent>
@@ -621,6 +640,28 @@ export default function Calendar() {
                 onChange={(e) => setNewEventTitle(e.target.value)}
                 data-testid="input-event-title"
               />
+            </div>
+            <div>
+              <Label>Date</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start text-left font-normal mt-1"
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {format(newEventDate, "EEE, MMM d, yyyy")}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <DatePicker
+                    mode="single"
+                    selected={newEventDate}
+                    onSelect={(d) => d && setNewEventDate(d)}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
             <div className="flex items-center justify-between">
               <Label htmlFor="event-all-day">All Day Event</Label>
@@ -665,6 +706,43 @@ export default function Calendar() {
                 data-testid="input-event-location"
               />
             </div>
+            <div>
+              <Label className="flex items-center gap-2">
+                <Repeat className="w-4 h-4" />
+                Repeat
+              </Label>
+              <Select value={newEventRepeat} onValueChange={(v) => setNewEventRepeat(v as CalendarEventRepeat)}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  <SelectItem value="daily">Daily</SelectItem>
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                  <SelectItem value="yearly">Yearly</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="flex items-center gap-2">
+                <Bell className="w-4 h-4" />
+                Alert
+              </Label>
+              <Select value={newEventAlert} onValueChange={(v) => setNewEventAlert(v as CalendarEventAlert)}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  <SelectItem value="0">At time of event</SelectItem>
+                  <SelectItem value="5">5 minutes before</SelectItem>
+                  <SelectItem value="15">15 minutes before</SelectItem>
+                  <SelectItem value="60">1 hour before</SelectItem>
+                  <SelectItem value="1440">1 day before</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <Button onClick={handleSubmitEvent} className="w-full" data-testid="button-submit-event">
               Add Event
             </Button>
@@ -673,151 +751,14 @@ export default function Calendar() {
       </Dialog>
 
 
-      {/* Features Sidebar */}
-      {(showMenuDialog || isClosing) && (
-        <div 
-          className="fixed inset-0 z-50 bg-black/50 transition-opacity duration-300" style={{ opacity: isClosing ? 0 : 1 }} 
-          onClick={() => { setIsClosing(true); setTimeout(() => { setShowMenuDialog(false); setIsClosing(false); }, 200); }}
-        >
-          <div 
-            className="fixed right-0 top-0 h-full w-80 bg-white dark:bg-gray-900 shadow-2xl border-l border-gray-200 dark:border-gray-700 rounded-tl-3xl rounded-bl-3xl overflow-hidden" 
-            style={{ 
-              transform: isClosing ? 'translateX(100%)' : 'translateX(0)',
-              transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)',
-              animation: !isClosing ? 'slideInFromRight 0.3s ease-out' : undefined
-            }} 
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold">Features</h2>
-                <Button variant="ghost" size="icon" onClick={() => { setIsClosing(true); setTimeout(() => { setShowMenuDialog(false); setIsClosing(false); }, 200); }}>
-                  <X className="w-5 h-5" />
-                </Button>
-              </div>
-
-              {/* Features List */}
-              <div className="space-y-2">
-                <Card className="p-4 cursor-pointer hover:shadow-md transition-all" onClick={() => { setShowMenuDialog(false); }}>
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
-                      <Moon className="w-5 h-5 text-purple-600" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-medium">Sleep Schedule</h3>
-                    </div>
-                  </div>
-                </Card>
-
-                <Card className="p-4 cursor-pointer hover:shadow-md transition-all" onClick={() => { setShowMenuDialog(false); }}>
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-lg bg-pink-100 flex items-center justify-center">
-                      <Heart className="w-5 h-5 text-pink-600" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-medium">Menstrual Cycle</h3>
-                    </div>
-                  </div>
-                </Card>
-
-                <Card className="p-4 cursor-pointer hover:shadow-md transition-all" onClick={() => { setShowMenuDialog(false); }}>
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                      <Pill className="w-5 h-5 text-blue-600" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-medium">Medication</h3>
-                    </div>
-                  </div>
-                </Card>
-
-                <Card className="p-4 cursor-pointer hover:shadow-md transition-all" onClick={() => { setShowMenuDialog(false); }}>
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-lg bg-cyan-100 flex items-center justify-center">
-                      <Droplets className="w-5 h-5 text-cyan-600" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-medium">Water Intake</h3>
-                    </div>
-                  </div>
-                </Card>
-
-                <Card className="p-4 cursor-pointer hover:shadow-md transition-all" onClick={() => { setShowMenuDialog(false); }}>
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
-                      <Briefcase className="w-5 h-5 text-green-600" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-medium">Work</h3>
-                    </div>
-                  </div>
-                </Card>
-
-                <Card className="p-4 cursor-pointer hover:shadow-md transition-all" onClick={() => { setShowMenuDialog(false); }}>
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                      <GraduationCap className="w-5 h-5 text-blue-600" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-medium">School</h3>
-                    </div>
-                  </div>
-                </Card>
-
-                <Card className="p-4 cursor-pointer hover:shadow-md transition-all" onClick={() => { setShowMenuDialog(false); }}>
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center">
-                      <BookOpen className="w-5 h-5 text-indigo-600" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-medium">Journal</h3>
-                    </div>
-                  </div>
-                </Card>
-              </div>
-              
-              {/* Settings and Stats Icons */}
-              <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
-                <div className="flex items-center justify-around">
-                  <Button variant="ghost" size="icon" onClick={() => { setShowStats(true); setShowMenuDialog(false); }} title="Statistics">
-                    <BarChart3 className="w-5 h-5 text-amber-600" />
-                  </Button>
-                  <Button variant="ghost" size="icon" onClick={() => { setShowSettings(true); setShowMenuDialog(false); }} title="Settings">
-                    <Settings2 className="w-5 h-5 text-slate-600" />
-                  </Button>
-                </div>
-              </div>
-              
-              {/* App Version & Social Links */}
-              <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
-                <div className="text-xs text-muted-foreground text-center mb-3">
-                  <p className="font-medium">App Version</p>
-                  <p className="mt-1">v1.0.0</p>
-                </div>
-                
-                {/* Social Links */}
-                <div className="flex items-center justify-center gap-3">
-                  <Button variant="ghost" size="icon" className="h-8 w-8" title="GitHub">
-                    <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-                    </svg>
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" title="Twitter">
-                    <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723c-.951.555-2.005.959-3.127 1.184a4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475 4.911 4.911 0 002.188 4.09 4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.827 4.996 4.996 0 01-2.212.085 4.936 4.936 0 004.604 3.417 9.867 9.867 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 007.557 2.209c9.053 0 13.998-7.496 13.998-13.985 0-.21 0-.42-.015-.63A9.935 9.935 0 0024 4.59z"/>
-                    </svg>
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" title="LinkedIn">
-                    <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
-                    </svg>
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Features Sidebar - slides from left */}
+      <FeaturesSidebar
+        isOpen={showMenuDialog}
+        onClose={() => { setIsClosing(true); setTimeout(() => { setShowMenuDialog(false); setIsClosing(false); }, 200); }}
+        isClosing={isClosing}
+        onStatsClick={() => { setShowStats(true); setShowMenuDialog(false); }}
+        onSettingsClick={() => { setShowSettings(true); setShowMenuDialog(false); }}
+      />
 
       {/* Lazy loaded stats dialog */}
       <Suspense fallback={<div />}>

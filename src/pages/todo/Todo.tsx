@@ -20,14 +20,30 @@ import CircularProgress from "@/components/general/CircularProgress";
 import { QuoteOfTheDay, getQuoteSettings } from "@/components/features/todo/QuoteOfTheDay";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UniversalDialog, PageHeader, FeatureDialogs, FeaturesSidebar } from "@/components/general";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Menu } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Menu, Bell, Image as ImageIconLucide, MapPin as MapPinIcon, FileText, ListChecks, Repeat, Trash2, X as XIcon, Plus } from "lucide-react";
 import { format, addDays, startOfWeek, isToday, isSameDay, subDays } from "date-fns";
 import { useOptimizedLocalStorage } from "@/hooks/useLocalStorage";
 import { useTasksOptimized } from "@/hooks/useTasksOptimized";
+import { haptics } from "@/lib/haptics";
+
+const TASK_CLICK_SOUND = "/sounds/click.mp3";
+
+function playTaskToggleSound() {
+  try {
+    const audio = new Audio(TASK_CLICK_SOUND);
+    audio.volume = 0.5;
+    audio.play().catch(() => {});
+  } catch {
+    // ignore
+  }
+}
 
 export default function Todo() {
   const [showStats, setShowStats] = useState(false);
@@ -41,7 +57,17 @@ export default function Todo() {
   const [triggerConfetti, setTriggerConfetti] = useState(false);
   const hasShownConfettiRef = useRef<string>(''); // Track date-hash of completed tasks
   const isInitialLoadRef = useRef(true); // Track if this is the initial page load
+  const prevSelectedDateRef = useRef<string>(selectedDate.toISOString().split('T')[0]); // Avoid confetti when switching dates
   const [editingAllDayTask, setEditingAllDayTask] = useState<Task | null>(null);
+  const [editActiveIconSection, setEditActiveIconSection] = useState<'alert' | 'photo' | 'location' | 'note' | 'checklist' | 'repeat' | null>(null);
+  const [editAlertTimes, setEditAlertTimes] = useState<string[]>([]);
+  const [editNewAlertTime, setEditNewAlertTime] = useState("");
+  const [editAttachments, setEditAttachments] = useState<string[]>([]);
+  const [editSubtasks, setEditSubtasks] = useState<any[]>([]);
+  const [editNewSubtaskText, setEditNewSubtaskText] = useState("");
+  const [editScheduleType, setEditScheduleType] = useState<"once" | "daily" | "weekly" | "biweekly" | "monthly">("once");
+  const [editScheduleInterval, setEditScheduleInterval] = useState(1);
+  const [editSelectedDays, setEditSelectedDays] = useState<number[]>([1]);
   const [isOfficeDialogOpen, setIsOfficeDialogOpen] = useState(false);
   const [isStudentDialogOpen, setIsStudentDialogOpen] = useState(false);
   const [isJournalDialogOpen, setIsJournalDialogOpen] = useState(false);
@@ -359,6 +385,26 @@ export default function Todo() {
     // Skip confetti check on initial page load
     if (isInitialLoadRef.current) {
       isInitialLoadRef.current = false;
+      prevSelectedDateRef.current = selectedDate.toISOString().split('T')[0];
+      return;
+    }
+
+    const currentDateStr = selectedDate.toISOString().split('T')[0];
+    // Skip confetti when user switched dates - only trigger when completing tasks on same date
+    if (currentDateStr !== prevSelectedDateRef.current) {
+      prevSelectedDateRef.current = currentDateStr;
+      // Mark the new date's completion state as "seen" so we don't retrigger when effect runs again
+      const tasksForNewDate = tasks.filter(t => {
+        if (!t.dueDate) return false;
+        const taskDate = t.dueDate instanceof Date ? t.dueDate : new Date(t.dueDate);
+        if (!isSameDay(taskDate, selectedDate)) return false;
+        if (t.source === 'water' || t.source === 'sleep' || t.source === 'steps' || t.parentId) return false;
+        return true;
+      });
+      const allComplete = tasksForNewDate.length > 0 && tasksForNewDate.every(t => t.completed);
+      hasShownConfettiRef.current = allComplete
+        ? `${currentDateStr}-${tasksForNewDate.map(t => t.id).sort().join('-')}`
+        : '';
       return;
     }
     
@@ -406,16 +452,21 @@ export default function Todo() {
   }, [tasks, triggerConfetti, selectedDate]); // Include selectedDate to check correct date
 
   const handleToggleTask = useCallback((id: string) => {
+    playTaskToggleSound();
+
     const task = tasks.find((t) => t.id === id);
     const isCompleting = !task?.completed;
-    
+
     // Handle water reminders specially - show amount dialog
     if (task && task.source === "water" && isCompleting) {
       setPendingWaterTask(task);
       setWaterDialogOpen(true);
       return;
     }
-    
+
+    // Haptic: one call per toggle (no double-trigger; we're in the click handler)
+    if (isCompleting) haptics.success(); else haptics.light();
+
     setTasks(prevTasks => {
       const updatedTasks = prevTasks.map((t) => 
         t.id === id 
@@ -431,9 +482,10 @@ export default function Todo() {
     });
     
     // Delete reminder when task from reminder is completed
-    if (task && task.source === "reminder" && task.reminderId && isCompleting) {
+    const reminderId = task && (task as Task & { reminderId?: string }).reminderId;
+    if (task && task.source === "reminder" && reminderId && isCompleting) {
       const reminders = JSON.parse(localStorage.getItem('reminders') || '[]');
-      const updatedReminders = reminders.filter((r: any) => r.id !== task.reminderId);
+      const updatedReminders = reminders.filter((r: any) => r.id !== reminderId);
       localStorage.setItem('reminders', JSON.stringify(updatedReminders));
       window.dispatchEvent(new Event('remindersUpdated'));
     }
@@ -618,14 +670,46 @@ export default function Todo() {
 
   const handleEditAllDayTask = useCallback((task: Task) => {
     setEditingAllDayTask(task);
+    setEditActiveIconSection(null);
+    setEditAlertTimes(task.alertTimes || []);
+    setEditNewAlertTime("");
+    setEditAttachments(task.attachments || []);
+    setEditSubtasks(task.subtasks || []);
+    setEditNewSubtaskText("");
+    setEditScheduleType(task.repeat === "daily" ? "daily" : task.repeat === "weekly" ? "weekly" : task.repeat === "monthly" ? "monthly" : "once");
+    setEditScheduleInterval(1);
+    setEditSelectedDays([1]);
   }, []);
 
   const handleSaveAllDayTaskEdit = useCallback(() => {
     if (!editingAllDayTask) return;
     
-    handleUpdateTask(editingAllDayTask.id, editingAllDayTask);
+    const updatedTask = {
+      ...editingAllDayTask,
+      alertTimes: editAlertTimes.length > 0 ? editAlertTimes : undefined,
+      attachments: editAttachments.length > 0 ? editAttachments : undefined,
+      subtasks: editSubtasks.length > 0 ? editSubtasks : undefined,
+    };
+    
+    handleUpdateTask(editingAllDayTask.id, updatedTask);
     setEditingAllDayTask(null);
-  }, [editingAllDayTask, handleUpdateTask]);
+    setEditActiveIconSection(null);
+  }, [editingAllDayTask, editAlertTimes, editAttachments, editSubtasks, handleUpdateTask]);
+
+  const handleEditImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    Array.from(files).forEach((file) => {
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64 = reader.result as string;
+          setEditAttachments(prev => [...prev, base64]);
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+  };
 
   const getWaterUnit = useCallback(() => {
     const waterSettings = JSON.parse(localStorage.getItem('water_settings') || '{}');
@@ -696,6 +780,16 @@ export default function Todo() {
     setSelectedDate(prev => direction === 'prev' ? subDays(prev, 1) : addDays(prev, 1));
   }, []);
 
+  const getProgressForDate = useCallback((date: Date) => {
+    const tasksForDate = getTasksForDate(date);
+    const countable = tasksForDate.filter(t => 
+      t.source !== 'water' && t.source !== 'sleep' && t.source !== 'steps' &&
+      t.source !== 'startup' && t.source !== 'winddown' && !t.parentId && !t.isContainer
+    );
+    const completed = countable.filter(t => t.completed).length;
+    return { completed, total: countable.length };
+  }, [getTasksForDate]);
+
   // Memoize completion stats for selected date - only count actual tasks, not system tasks or child tasks
   const { countableTasks, completedCount, totalCount } = useMemo(() => {
     const countable = todayTasks.filter(t => 
@@ -718,43 +812,41 @@ export default function Todo() {
   }, [todayTasks]);
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="h-[100dvh] overflow-y-auto bg-background pb-20" data-todo-scroll-container>
       <SEO
         title="To-Do"
         description="Manage your tasks and stay productive"
         noindex={true}
       />
-      {/* Sticky Header */}
-      <PageHeader>
-        {/* Header Row with Date and Actions */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <h1 className="text-lg font-semibold">
-              {format(selectedDate, 'MMMM d, yyyy')}
-            </h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button 
-              variant="ghost" 
-              size="icon"
-              onClick={() => setShowFeaturesMenu(true)}
-            >
-              <Menu className="w-5 h-5" />
-            </Button>
-          </div>
+      {/* Sticky Header - collapses on scroll */}
+      <PageHeader collapsibleOnScroll>
+        {/* Header Row - Menu and Date Carousel on same line */}
+        <div className="flex items-center gap-2 mb-1">
+          <DateCarousel 
+            selectedDate={selectedDate}
+            onDateChange={setSelectedDate}
+            completedCount={completedCount}
+            totalCount={totalCount}
+            getProgressForDate={getProgressForDate}
+            leftSlot={
+              <Button 
+                variant="ghost" 
+                size="icon"
+                onClick={() => setShowFeaturesMenu(true)}
+                className="flex-shrink-0 h-10 w-10"
+              >
+                <Menu className="w-5 h-5" />
+              </Button>
+            }
+            rightSlot={<div className="w-10 flex-shrink-0" />}
+          />
         </div>
-        
-        {/* Date Carousel */}
-        <DateCarousel 
-          selectedDate={selectedDate}
-          onDateChange={setSelectedDate}
-        />
       </PageHeader>
 
-      <main className="px-4 py-6">
-        
+      <main className="px-4 pt-3 pb-6">
+        <div key={selectedDate.toISOString().split('T')[0]}>
         {/* Progress Indicators */}
-        <div className="flex flex-nowrap justify-center items-start gap-6 mb-6">
+        <div className="flex flex-nowrap justify-center items-start gap-6 mb-3">
           {/* Food Tracker - Show on left side if configured */}
           {(() => {
             const foodSettings = JSON.parse(localStorage.getItem('food_settings') || '{}');
@@ -858,17 +950,7 @@ export default function Todo() {
             );
           })()}
           
-          <div className="flex flex-col items-center gap-2">
-            <CircularProgress 
-              completed={completedCount}
-              total={totalCount}
-              size={100}
-              strokeWidth={8}
-            />
-            <p className="text-sm text-muted-foreground">
-              {completedCount} / {totalCount} tasks
-            </p>
-          </div>
+          {/* Task progress now shown around selected date in DateCarousel */}
           
           {/* Water Intake - Only show if user has actually configured it */}
           {(() => {
@@ -938,10 +1020,29 @@ export default function Todo() {
           })()}
         </div>
 
-        {/* Main Content - Show All Day Tasks and Liquid Timeline */}
-        <div className="mt-6 space-y-8">
+        {/* Task progress circle - below date carousel, between timeline */}
+        {(() => {
+          const hasAllDayTasks = todayTasks.filter(t => t.allDay || (!t.time && !t.allDay)).length > 0;
+          return (
+        <div className={`flex justify-center ${hasAllDayTasks ? 'py-2' : 'py-1 pb-0.5'}`}>
+          <CircularProgress 
+            completed={completedCount}
+            total={totalCount}
+            size={80}
+            strokeWidth={6}
+          />
+        </div>
+          );
+        })()}
+
+        {/* Main Content - All Day Tasks centered between gauge and timeline */}
+        {(() => {
+          const hasAllDayTasks = todayTasks.filter(t => t.allDay || (!t.time && !t.allDay)).length > 0;
+          return (
+        <div className={hasAllDayTasks ? 'mt-6 space-y-0' : 'mt-0.5 space-y-0'}>
           
-          {todayTasks.filter(t => t.allDay || (!t.time && !t.allDay)).length > 0 && (
+          {hasAllDayTasks && (
+            <div className="mb-6">
             <AllDayTasks 
               tasks={todayTasks.filter(t => t.allDay || (!t.time && !t.allDay))}
               onToggleTask={handleToggleTask}
@@ -950,11 +1051,12 @@ export default function Todo() {
               getSourceBadge={getSourceBadge}
               onOpenWorkDialog={() => setIsOfficeDialogOpen(true)}
             />
+            </div>
           )}
 
           {/* Quote of the Day - shown between all-day tasks and timeline (only on current day) */}
           {quoteSettings.enabled && isToday(selectedDate) && (
-            <div className="max-w-md mx-auto">
+            <div className="max-w-md mx-auto py-2">
               <QuoteOfTheDay />
             </div>
           )}
@@ -965,9 +1067,7 @@ export default function Todo() {
             onToggleTask={handleToggleTask}
             onUpdateTask={handleUpdateTask}
             onDeleteTask={handleDeleteTask}
-            onWaterReminderClick={handleWaterReminderClick}
             onAddTaskClick={handleAddTaskFromTimeline}
-            getSourceBadge={getSourceBadge}
             onToggleSubtask={(taskId, subtaskId) => {
               setTasks(prev =>
                 prev.map(t =>
@@ -984,6 +1084,8 @@ export default function Todo() {
             }}
           />
         </div>
+          );
+        })()}
       
       {/* Hidden Add Task Dialog - triggered by BottomNav + button */}
       <div style={{ display: 'none' }}>
@@ -998,6 +1100,7 @@ export default function Todo() {
           selectedDate={selectedDate}
         />
       </div>
+        </div>
       </main>
 
       {/* Lazy loaded dialogs with Suspense boundaries */}
@@ -1020,45 +1123,219 @@ export default function Todo() {
         unit={getWaterUnit() as "ml" | "oz"}
       />
 
-      {/* Edit All Day Task Dialog */}
-      <Dialog open={!!editingAllDayTask} onOpenChange={(open) => !open && setEditingAllDayTask(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Edit Task</DialogTitle>
-          </DialogHeader>
-          {editingAllDayTask && (
-            <div className="space-y-4 pt-4">
+      {/* Edit Task Dialog */}
+      <UniversalDialog
+        open={!!editingAllDayTask}
+        onOpenChange={(open) => !open && setEditingAllDayTask(null)}
+        title=""
+        hideDefaultFooter
+        hideHeader
+      >
+        {editingAllDayTask && (
+          <div className="w-full">
+            {/* Header with title and close button */}
+            <div className="flex items-center justify-between w-full gap-2 mb-4 pb-3 border-b">
+              <h2 className="text-lg font-semibold">Edit Task</h2>
+              <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0" onClick={() => setEditingAllDayTask(null)} aria-label="Close">
+                <XIcon className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="space-y-4">
+              {/* 1. Emoji + Color */}
+              <div className="flex flex-col items-center gap-3">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button type="button" className="w-16 h-16 rounded-full flex items-center justify-center text-3xl border-2 border-border shadow-sm hover:scale-105 transition-transform" style={{ backgroundColor: editingAllDayTask.color || 'hsl(var(--primary))' }}>
+                      {editingAllDayTask.emoji || "📝"}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto max-w-sm p-3" align="center">
+                    <p className="text-sm font-medium mb-2 text-center">Choose Emoji</p>
+                    <EmojiPicker value={editingAllDayTask.emoji || "📝"} onChange={(emoji) => setEditingAllDayTask({...editingAllDayTask, emoji})} category="common" />
+                  </PopoverContent>
+                </Popover>
+                <div className="flex items-center gap-2 w-full max-w-[240px]">
+                  <Label htmlFor="edit-task-color" className="text-sm font-medium shrink-0">Color</Label>
+                  <Input
+                    id="edit-task-color"
+                    type="color"
+                    value={editingAllDayTask.color?.startsWith('#') ? editingAllDayTask.color : '#3b82f6'}
+                    onChange={(e) => setEditingAllDayTask({...editingAllDayTask, color: e.target.value})}
+                    className="w-10 h-10 cursor-pointer p-1 rounded border shrink-0"
+                  />
+                  <Input
+                    type="text"
+                    value={editingAllDayTask.color?.startsWith('#') ? editingAllDayTask.color : ''}
+                    onChange={(e) => setEditingAllDayTask({...editingAllDayTask, color: e.target.value})}
+                    placeholder="#hex or theme"
+                    className="flex-1 text-xs font-mono h-9 min-w-0"
+                  />
+                </div>
+              </div>
+
+              {/* 2. Title */}
               <div>
-                <Label htmlFor="edit-allday-title">Task Title</Label>
+                <Label htmlFor="edit-title" className="text-sm font-medium">Title</Label>
                 <Input
-                  id="edit-allday-title"
+                  id="edit-title"
                   value={editingAllDayTask.title}
                   onChange={(e) => setEditingAllDayTask({...editingAllDayTask, title: e.target.value})}
                   placeholder="Task title"
+                  className="mt-1"
                 />
               </div>
 
+              {/* 3. Date */}
               <div>
-                <Label>Emoji</Label>
-                <EmojiPicker 
-                  value={editingAllDayTask.emoji || "📝"}
-                  onChange={(emoji) => setEditingAllDayTask({...editingAllDayTask, emoji})}
-                  category="common"
+                <Label htmlFor="edit-dueDate" className="text-sm font-medium">Date</Label>
+                <Input
+                  id="edit-dueDate"
+                  type="date"
+                  value={editingAllDayTask.dueDate ? new Date(editingAllDayTask.dueDate).toISOString().split('T')[0] : ''}
+                  onChange={(e) => setEditingAllDayTask({...editingAllDayTask, dueDate: new Date(e.target.value)})}
+                  className="mt-1"
                 />
               </div>
 
-              <div>
-                <Label htmlFor="edit-allday-notes">Notes (optional)</Label>
-                <Textarea
-                  id="edit-allday-notes"
-                  value={editingAllDayTask.notes || ""}
-                  onChange={(e) => setEditingAllDayTask({...editingAllDayTask, notes: e.target.value})}
-                  placeholder="Add notes..."
-                  rows={3}
+              {/* 4. All Day switch */}
+              <div className="flex items-center justify-between py-2 rounded-lg border bg-muted/30 px-3">
+                <span className="text-sm font-medium">All day task</span>
+                <Switch
+                  checked={editingAllDayTask.allDay ?? true}
+                  onCheckedChange={(checked) => setEditingAllDayTask({...editingAllDayTask, allDay: checked})}
                 />
               </div>
 
-              <div className="flex gap-2 pt-4">
+              {/* Start / End - only shown when not all-day */}
+              {!editingAllDayTask.allDay && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="edit-time" className="text-xs">Start</Label>
+                    <Input
+                      id="edit-time"
+                      type="time"
+                      value={editingAllDayTask.time || ''}
+                      onChange={(e) => setEditingAllDayTask({...editingAllDayTask, time: e.target.value})}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="edit-end-time" className="text-xs">End</Label>
+                    <Input
+                      id="edit-end-time"
+                      type="time"
+                      value={editingAllDayTask.endTime || ''}
+                      onChange={(e) => setEditingAllDayTask({...editingAllDayTask, endTime: e.target.value})}
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 5. Icon row */}
+              <div className="flex items-center justify-center gap-1.5 py-2 flex-wrap">
+                <button type="button" onClick={() => setEditActiveIconSection(editActiveIconSection === 'alert' ? null : 'alert')} className={`flex flex-col items-center gap-0.5 p-2 rounded-lg border transition-colors min-w-[48px] ${editActiveIconSection === 'alert' ? 'bg-primary/10 border-primary' : 'bg-muted/30 border-transparent hover:bg-muted/50'}`} title="Alerts"><Bell className="w-4 h-4" /><span className="text-[9px]">Alert</span></button>
+                <button type="button" onClick={() => setEditActiveIconSection(editActiveIconSection === 'photo' ? null : 'photo')} className={`flex flex-col items-center gap-0.5 p-2 rounded-lg border transition-colors min-w-[48px] ${editActiveIconSection === 'photo' ? 'bg-primary/10 border-primary' : 'bg-muted/30 border-transparent hover:bg-muted/50'}`} title="Photos"><ImageIconLucide className="w-4 h-4" /><span className="text-[9px]">Photo</span></button>
+                <button type="button" onClick={() => setEditActiveIconSection(editActiveIconSection === 'location' ? null : 'location')} className={`flex flex-col items-center gap-0.5 p-2 rounded-lg border transition-colors min-w-[48px] ${editActiveIconSection === 'location' ? 'bg-primary/10 border-primary' : 'bg-muted/30 border-transparent hover:bg-muted/50'}`} title="Location"><MapPinIcon className="w-4 h-4" /><span className="text-[9px]">Location</span></button>
+                <button type="button" onClick={() => setEditActiveIconSection(editActiveIconSection === 'note' ? null : 'note')} className={`flex flex-col items-center gap-0.5 p-2 rounded-lg border transition-colors min-w-[48px] ${editActiveIconSection === 'note' ? 'bg-primary/10 border-primary' : 'bg-muted/30 border-transparent hover:bg-muted/50'}`} title="Notes"><FileText className="w-4 h-4" /><span className="text-[9px]">Note</span></button>
+                <button type="button" onClick={() => setEditActiveIconSection(editActiveIconSection === 'checklist' ? null : 'checklist')} className={`flex flex-col items-center gap-0.5 p-2 rounded-lg border transition-colors min-w-[48px] ${editActiveIconSection === 'checklist' ? 'bg-primary/10 border-primary' : 'bg-muted/30 border-transparent hover:bg-muted/50'}`} title="Checklist"><ListChecks className="w-4 h-4" /><span className="text-[9px]">Checklist</span></button>
+                <button type="button" onClick={() => setEditActiveIconSection(editActiveIconSection === 'repeat' ? null : 'repeat')} className={`flex flex-col items-center gap-0.5 p-2 rounded-lg border transition-colors min-w-[48px] ${editActiveIconSection === 'repeat' ? 'bg-primary/10 border-primary' : 'bg-muted/30 border-transparent hover:bg-muted/50'}`} title="Repeat"><Repeat className="w-4 h-4" /><span className="text-[9px]">Repeat</span></button>
+              </div>
+
+              {/* Expanded sections */}
+              {editActiveIconSection === 'alert' && (
+                <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+                  <Label className="text-sm font-medium flex items-center gap-2"><Bell className="w-4 h-4" /> Alerts</Label>
+                  {editAlertTimes.map((t, i) => (
+                    <div key={i} className="flex items-center gap-2 text-sm p-2 bg-background rounded border">
+                      <span className="flex-1">🔔 {t}</span>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setEditAlertTimes(editAlertTimes.filter((_, idx) => idx !== i))}><XIcon className="w-3 h-3" /></Button>
+                    </div>
+                  ))}
+                  <div className="flex gap-2">
+                    <Input type="time" value={editNewAlertTime} onChange={(e) => setEditNewAlertTime(e.target.value)} placeholder="Add time" className="flex-1" />
+                    <Button type="button" variant="outline" size="sm" onClick={() => { if (editNewAlertTime) { setEditAlertTimes([...editAlertTimes, editNewAlertTime]); setEditNewAlertTime(""); } }} disabled={!editNewAlertTime}><Plus className="w-4 h-4" /></Button>
+                  </div>
+                </div>
+              )}
+              {editActiveIconSection === 'photo' && (
+                <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+                  <Label className="text-sm font-medium flex items-center gap-2"><ImageIconLucide className="w-4 h-4" /> Photos</Label>
+                  {editAttachments.length > 0 && (
+                    <div className="grid grid-cols-3 gap-2">
+                      {editAttachments.map((img, i) => (
+                        <div key={i} className="relative group">
+                          <img src={img} alt="" className="w-full h-16 object-cover rounded border" />
+                          <Button type="button" variant="destructive" size="sm" className="absolute top-0.5 right-0.5 h-5 w-5 p-0 opacity-0 group-hover:opacity-100" onClick={() => setEditAttachments(editAttachments.filter((_, idx) => idx !== i))}><XIcon className="w-3 h-3" /></Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <Input type="file" accept="image/*" multiple onChange={handleEditImageUpload} className="cursor-pointer text-sm" />
+                </div>
+              )}
+              {editActiveIconSection === 'location' && (
+                <div className="rounded-lg border bg-muted/20 p-3">
+                  <Label className="text-sm font-medium flex items-center gap-2"><MapPinIcon className="w-4 h-4" /> Location</Label>
+                  <Input value={editingAllDayTask.location || ''} onChange={(e) => setEditingAllDayTask({...editingAllDayTask, location: e.target.value})} placeholder="Where?" className="mt-2" />
+                </div>
+              )}
+              {editActiveIconSection === 'note' && (
+                <div className="rounded-lg border bg-muted/20 p-3">
+                  <Label className="text-sm font-medium flex items-center gap-2"><FileText className="w-4 h-4" /> Notes</Label>
+                  <Textarea value={editingAllDayTask.notes || ''} onChange={(e) => setEditingAllDayTask({...editingAllDayTask, notes: e.target.value})} placeholder="Add notes..." rows={3} className="mt-2" />
+                </div>
+              )}
+              {editActiveIconSection === 'checklist' && (
+                <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+                  <Label className="text-sm font-medium flex items-center gap-2"><ListChecks className="w-4 h-4" /> Subtasks</Label>
+                  {editSubtasks.map((st) => (
+                    <div key={st.id} className="flex items-center gap-2 text-sm p-2 bg-background rounded border">
+                      <span className="flex-1">{st.text}</span>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setEditSubtasks(editSubtasks.filter((s) => s.id !== st.id))}><XIcon className="w-3 h-3" /></Button>
+                    </div>
+                  ))}
+                  <div className="flex gap-2">
+                    <Input value={editNewSubtaskText} onChange={(e) => setEditNewSubtaskText(e.target.value)} placeholder="Add subtask" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (editNewSubtaskText.trim()) { setEditSubtasks([...editSubtasks, { id: Date.now().toString(), text: editNewSubtaskText.trim(), completed: false }]); setEditNewSubtaskText(""); } } }} className="flex-1" />
+                    <Button type="button" variant="outline" size="sm" onClick={() => { if (editNewSubtaskText.trim()) { setEditSubtasks([...editSubtasks, { id: Date.now().toString(), text: editNewSubtaskText.trim(), completed: false }]); setEditNewSubtaskText(""); } }} disabled={!editNewSubtaskText.trim()}><Plus className="w-4 h-4" /></Button>
+                  </div>
+                </div>
+              )}
+              {editActiveIconSection === 'repeat' && (
+                <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+                  <Label className="text-sm font-medium flex items-center gap-2"><Repeat className="w-4 h-4" /> Repeat</Label>
+                  <Select value={editScheduleType} onValueChange={(value: any) => setEditScheduleType(value)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="once">Once (no repeat)</SelectItem>
+                      <SelectItem value="daily">Daily</SelectItem>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                      <SelectItem value="biweekly">Every 2 weeks</SelectItem>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* Delete Button */}
+              <Button 
+                type="button" 
+                variant="destructive" 
+                className="w-full flex items-center gap-2" 
+                onClick={() => {
+                  if (confirm('Are you sure you want to delete this task?')) {
+                    handleDeleteTask(editingAllDayTask.id);
+                    setEditingAllDayTask(null);
+                  }
+                }}
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete Task
+              </Button>
+
+              {/* Action buttons */}
+              <div className="flex gap-2 pt-4 border-t">
                 <Button type="button" variant="outline" onClick={() => setEditingAllDayTask(null)} className="flex-1">
                   Cancel
                 </Button>
@@ -1067,9 +1344,9 @@ export default function Todo() {
                 </Button>
               </div>
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
+          </div>
+        )}
+      </UniversalDialog>
 
       <ConfettiEffect 
         trigger={triggerConfetti} 

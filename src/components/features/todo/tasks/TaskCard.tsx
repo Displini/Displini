@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 import { Task } from '@/types/types';
-import { ChevronDown, ChevronUp, CheckCircle2, Circle, Clock, ExternalLink, Pencil, Image as ImageIcon, Plus, X, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, CheckCircle2, Circle, Clock, ExternalLink, Pencil, Image as ImageIcon, MapPin, Plus, X, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { SubtaskTimeline } from './SubtaskTimeline';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 interface TaskCardProps {
   task: Task;
   isInGroup?: boolean;
+  isOverdue?: boolean;
   onToggle: (id: string) => void;
   onEdit?: (task: Task) => void;
   onDelete?: (id: string) => void;
@@ -21,9 +22,10 @@ interface TaskCardProps {
   isDragging?: boolean;
 }
 
-export function TaskCard({
+function TaskCardInner({
   task,
   isInGroup = false,
+  isOverdue = false,
   onToggle,
   onEdit,
   onDelete,
@@ -69,20 +71,27 @@ export function TaskCard({
     }
   };
 
+  const hasLocation = Boolean(task.location && task.location.trim());
+
   return (
     <div
       className={`${
         isInGroup 
           ? '' // No styling when in group container - container provides the card styling
-          : 'bg-card border border-border shadow-md rounded-lg p-4' // Full card styling when standalone
-      } ${task.completed ? 'opacity-60' : ''} ${isDragging ? 'opacity-70' : ''}`}
+          : 'bg-card border border-border shadow-sm rounded-lg p-4 transition-all duration-200 hover:shadow-md' // Full card styling when standalone
+      } ${isDragging ? 'opacity-70' : ''}`}
       onClick={handleClick}
       style={{
         cursor: 'pointer',
+        ...(task.color && !isInGroup ? { borderLeft: `4px solid ${task.color}` } : {}),
+        ...(isInGroup ? { position: 'relative' as const } : {}),
       }}
     >
-      {/* Main task content */}
-      <div className="flex items-center gap-3 w-full">
+      {/* Completion bar is rendered in LiquidTimeline with same top/height as candy cone */}
+      {/* Main task content – dimmed when completed so completion bar stays full opacity */}
+      <div className={task.completed ? 'opacity-60' : ''}>
+      {/* Main task content - icons centered vertically on the right */}
+      <div className="flex items-stretch gap-3 w-full">
         {/* Task emoji - in colored circle in middle left */}
         <div className="flex-shrink-0 flex items-center justify-center w-12 h-12">
           <div
@@ -96,92 +105,29 @@ export function TaskCard({
           </div>
         </div>
         
-        {/* Task details */}
-        <div className="flex-1 min-w-0">
+        {/* Task details - takes remaining space */}
+        <div className="flex-1 min-w-0 flex flex-col justify-center min-h-[3rem]">
           <div className="flex items-center gap-2 relative">
             <h3
-              className={`font-semibold relative ${
+              className={`font-semibold flex-1 min-w-0 ${
                 task.completed ? 'text-muted-foreground' : ''
               }`}
             >
-              {task.title}
-              {/* Animated line through when completed */}
-              {task.completed && (
-                <span
-                  className="absolute left-0 top-1/2 h-0.5 bg-muted-foreground"
-                  style={{
-                    width: '100%',
-                    animation: 'lineThrough 0.5s ease-out forwards',
-                    transform: 'translateY(-50%)',
-                  }}
-                />
-              )}
+              {/* Wrap title so strikethrough line only covers text width */}
+              <span className="relative inline-block">
+                {task.title}
+                {task.completed && (
+                  <span
+                    className="absolute left-0 top-1/2 h-0.5 bg-muted-foreground origin-left"
+                    style={{
+                      width: '100%',
+                      animation: 'lineThrough 0.5s ease-out forwards',
+                      transform: 'translateY(-50%)',
+                    }}
+                  />
+                )}
+              </span>
             </h3>
-            
-            <div className="flex items-center gap-2 ml-auto">
-              {hasAttachments && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowImagePreview(true);
-                  }}
-                  className="flex items-center gap-1 text-muted-foreground text-xs hover:text-foreground"
-                >
-                  <ImageIcon className="w-4 h-4" />
-                  <span>{task.attachments.length}</span>
-                </button>
-              )}
-            
-            {/* Non-editable tasks: Show shortcut icon instead of edit */}
-            {(() => {
-              const nonEditableSources = ['water', 'medication', 'sleep', 'office', 'steps'];
-              const isNonEditable = task.source && nonEditableSources.includes(task.source);
-              
-              if (isNonEditable && onSourceShortcut && task.source) {
-                return (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSourceShortcut(task.source!);
-                    }}
-                      className="flex-shrink-0 text-muted-foreground hover:text-primary transition-colors"
-                    aria-label={`Open ${task.source} settings`}
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                  </button>
-                );
-              }
-              
-              // Editable tasks: Show edit button
-              if (onEdit && !isNonEditable) {
-                return (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                        setDraftTitle(task.title);
-                        setDraftTime(task.time || "");
-                        setDraftEndTime(task.endTime || "");
-                        setDraftNotes(task.notes || "");
-                        setDraftEmoji(task.emoji || "📝");
-                        setDraftColor(task.color || "");
-                        setDraftAttachments(task.attachments || []);
-                        setDraftAlerts(task.alertTimes || []);
-                        setNewAlert("");
-                        setAttachmentError("");
-                        setEditOpen(true);
-                    }}
-                      className="flex-shrink-0 text-muted-foreground hover:text-primary transition-colors"
-                    aria-label="Edit task"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                );
-              }
-              
-              return null;
-            })()}
-            </div>
           </div>
           
           {/* Time - only show if NOT in group (group container shows time) */}
@@ -241,6 +187,44 @@ export function TaskCard({
             </div>
           )}
         </div>
+
+        {/* Right: location, photo, edit - vertically centered */}
+        <div className="flex-shrink-0 flex items-center gap-1.5">
+          {hasLocation && (
+            <span
+              className="text-muted-foreground flex items-center justify-center w-8 h-8 rounded-md hover:bg-muted/80"
+              title={task.location}
+            >
+              <MapPin className="w-4 h-4" />
+            </span>
+          )}
+          {hasAttachments && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowImagePreview(true);
+              }}
+              className="flex items-center justify-center w-8 h-8 rounded-md text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+              title={`${task.attachments!.length} photo(s)`}
+            >
+              <ImageIcon className="w-4 h-4" />
+            </button>
+          )}
+          {onEdit && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditOpen(true);
+              }}
+              className="flex items-center justify-center w-8 h-8 rounded-md text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+              title="Edit task"
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </div>
       
       {/* Expanded subtasks */}
@@ -259,6 +243,7 @@ export function TaskCard({
           )}
         </div>
       )}
+      </div>
 
       {/* Full subtasks dialog */}
       <Dialog open={showAllSubtasks} onOpenChange={setShowAllSubtasks}>
@@ -518,3 +503,5 @@ export function TaskCard({
   );
 }
 
+/** Memoized so we only re-render when task (or other props) change – not when the timeline clock updates every second. Lets the completion fill CSS animation run without being reset. */
+export const TaskCard = memo(TaskCardInner);

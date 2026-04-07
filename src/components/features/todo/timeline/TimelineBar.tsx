@@ -9,8 +9,8 @@ interface TimelineBarProps {
 }
 
 export function TimelineBar({ timelineHeight, startPx = 0, endPx }: TimelineBarProps) {
-  const top = Math.max(0, (startPx ?? 0) - 8);
-  const bottom = (endPx ?? timelineHeight) + 8;
+  const top = Math.max(0, startPx ?? 0);
+  const bottom = (endPx ?? timelineHeight) + 2;
   const height = Math.max(8, bottom - top);
 
   return (
@@ -20,7 +20,6 @@ export function TimelineBar({ timelineHeight, startPx = 0, endPx }: TimelineBarP
         top: `${top}px`,
         height: `${height}px`,
         backgroundColor: 'hsl(var(--muted))',
-        borderRadius: '999px',
         zIndex: 0,
       }}
     />

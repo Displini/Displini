@@ -1,9 +1,6 @@
 import { useState, useEffect } from "react";
-import { Quote, Settings } from "lucide-react";
+import { Quote, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { UniversalDialog } from "@/components/general";
 
 const quotes = [
   { text: "The only way to do great work is to love what you do.", author: "Steve Jobs" },
@@ -50,7 +47,7 @@ export function QuoteOfTheDay() {
     };
   });
   
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('quote_settings', JSON.stringify(settings));
@@ -66,16 +63,27 @@ export function QuoteOfTheDay() {
   const quote = getDailyQuote();
 
   return settings.enabled ? (
-    <div className="relative p-3 rounded-xl bg-gradient-to-br from-muted/30 to-transparent border shadow-sm max-w-full">
+    <div className="relative p-3 rounded-xl bg-gradient-to-br from-muted/30 to-transparent border border-border/60 shadow-sm max-w-full transition-all duration-200">
       <Quote className="w-4 h-4 text-muted-foreground/30 absolute top-3 left-3" />
-      <div className="pl-8">
-        <p className="text-sm leading-relaxed text-foreground mb-1 italic">
+      <div className="pl-8 pr-8">
+        <p className={`text-sm leading-relaxed text-foreground mb-1 italic transition-all duration-200 ${isCollapsed ? 'line-clamp-1' : ''}`}>
           "{quote.text}"
         </p>
-        <p className="text-xs text-muted-foreground font-medium">
-          — {quote.author}
-        </p>
+        {!isCollapsed && (
+          <p className="text-xs text-muted-foreground font-medium">
+            — {quote.author}
+          </p>
+        )}
       </div>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="absolute top-2 right-2 h-7 w-7 p-0 text-muted-foreground hover:text-foreground transition-colors"
+        onClick={() => setIsCollapsed(!isCollapsed)}
+        aria-label={isCollapsed ? "Expand quote" : "Collapse quote"}
+      >
+        {isCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+      </Button>
     </div>
   ) : null;
 }

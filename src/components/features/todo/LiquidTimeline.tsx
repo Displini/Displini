@@ -43,10 +43,31 @@ export default function LiquidTimeline({
   const timelineRef = useRef<HTMLDivElement>(null);
   const [currentTime, setCurrentTime] = useState(getCurrentTime());
 
+  const clockIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   useEffect(() => {
-    // Update every second for live updates
-    const id = setInterval(() => setCurrentTime(getCurrentTime()), 1000);
-    return () => clearInterval(id);
+    const startInterval = (ms: number) => {
+      if (clockIntervalRef.current) clearInterval(clockIntervalRef.current);
+      setCurrentTime(getCurrentTime());
+      clockIntervalRef.current = setInterval(() => setCurrentTime(getCurrentTime()), ms);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        startInterval(30000); // Throttle to 30s when tab is in background
+      } else {
+        startInterval(1000); // 1s when tab is visible
+      }
+    };
+
+    // Start with appropriate interval based on current visibility
+    startInterval(document.hidden ? 30000 : 1000);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      if (clockIntervalRef.current) clearInterval(clockIntervalRef.current);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   const currentTimeStr = formatTimeString(currentTime);
@@ -153,9 +174,10 @@ export default function LiquidTimeline({
       endPxLocal = last.topPx + last.heightPx;
     }
 
-    const neededHeight = Math.max(baseHeight, endPxLocal + 48);
+    const addButtonHeight = onAddTaskClick && positioned.length <= 3 ? 52 : 0;
+    const neededHeight = Math.max(baseHeight, endPxLocal + 48 + addButtonHeight);
     return { positionedGroups: positioned, finalHeight: neededHeight, startPx: startPxLocal, endPx: endPxLocal };
-  }, [taskGroups, pxPerMinute, bounds.startMinutes, baseHeight]);
+  }, [taskGroups, pxPerMinute, bounds.startMinutes, baseHeight, onAddTaskClick]);
 
   // Free gaps computed from positioned groups with pixel alignment
   const freeGaps = useMemo(() => {
@@ -226,11 +248,49 @@ export default function LiquidTimeline({
     return { visualStartPx: start, visualEndPx: end };
   }, [positionedGroups, startPxTime, endPxTime]);
 
+  // Position current time using the same overlap-adjusted layout as task groups so the dot is past earlier tasks (e.g. 22:07 past 22:00)
   const currentPosPx = useMemo(() => {
-    const curMin = timeToMinutes(currentTimeStr);
+    const now = currentTime;
+    const curMin = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+    if (!positionedGroups.length) {
+      const rawPx = (curMin - bounds.startMinutes) * pxPerMinute;
+      return Math.max(0, Math.min(finalHeight, rawPx));
+    }
+    const sorted = [...positionedGroups].sort((a, b) => timeToMinutes(a.group.startTime) - timeToMinutes(b.group.startTime));
+    const first = sorted[0];
+    const last = sorted[sorted.length - 1];
+    const firstStart = timeToMinutes(first.group.startTime);
+    const lastEnd = timeToMinutes(last.group.endTime || last.group.startTime);
+    if (curMin < firstStart) {
+      const rawPx = (curMin - bounds.startMinutes) * pxPerMinute;
+      return Math.max(0, rawPx);
+    }
+    if (curMin > lastEnd) {
+      const rawPx = last.topPx + last.heightPx + (curMin - lastEnd) * pxPerMinute;
+      return Math.min(finalHeight, rawPx);
+    }
+    for (let i = 0; i < sorted.length; i++) {
+      const g = sorted[i];
+      const startMin = timeToMinutes(g.group.startTime);
+      const endMin = timeToMinutes(g.group.endTime || g.group.startTime);
+      if (curMin >= startMin && curMin <= endMin) {
+        const frac = endMin > startMin ? (curMin - startMin) / (endMin - startMin) : 0;
+        return g.topPx + frac * g.heightPx;
+      }
+      if (i < sorted.length - 1) {
+        const next = sorted[i + 1];
+        const gapEnd = timeToMinutes(next.group.startTime);
+        if (curMin > endMin && curMin < gapEnd) {
+          const gapStartPx = g.topPx + g.heightPx;
+          const gapEndPx = next.topPx;
+          const frac = gapEnd > endMin ? (curMin - endMin) / (gapEnd - endMin) : 0;
+          return gapStartPx + frac * (gapEndPx - gapStartPx);
+        }
+      }
+    }
     const rawPx = (curMin - bounds.startMinutes) * pxPerMinute;
     return Math.max(0, Math.min(finalHeight, rawPx));
-  }, [currentTimeStr, bounds.startMinutes, pxPerMinute, finalHeight]);
+  }, [currentTime, bounds.startMinutes, pxPerMinute, finalHeight, positionedGroups]);
 
   const startOffsetPercent = useMemo(() => (visualStartPx > 0 ? (visualStartPx / finalHeight) * 100 : 0), [visualStartPx, finalHeight]);
   const currentFillPercent = useMemo(
@@ -238,45 +298,13 @@ export default function LiquidTimeline({
     [currentPosPx, visualEndPx, finalHeight, currentTimeStr]
   );
 
-  // Auto scroll to current time on page load/refresh
-  useEffect(() => {
-    if (isToday && timelineRef.current && currentPosPx > 0 && finalHeight > 0) {
-      // Small delay to ensure DOM is ready
-      const timeoutId = setTimeout(() => {
-        if (timelineRef.current) {
-          // Find the scrollable parent container
-          let scrollableParent = timelineRef.current.parentElement;
-          while (scrollableParent && !scrollableParent.classList.contains('overflow-auto') && !scrollableParent.classList.contains('overflow-y-auto')) {
-            scrollableParent = scrollableParent.parentElement;
-          }
-          
-          if (scrollableParent) {
-            // Calculate scroll position to center current time
-            const containerRect = scrollableParent.getBoundingClientRect();
-            const timelineRect = timelineRef.current.getBoundingClientRect();
-            const relativeTop = currentPosPx + timelineRect.top - containerRect.top;
-            const scrollPosition = relativeTop - (containerRect.height / 2);
-            
-            scrollableParent.scrollTo({ 
-              top: Math.max(0, scrollPosition + scrollableParent.scrollTop), 
-              behavior: 'smooth' 
-            });
-          } else {
-            // Fallback: scroll the timeline element into view
-            timelineRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }
-        }
-      }, 100);
-      
-      return () => clearTimeout(timeoutId);
-    }
-  }, [isToday, currentPosPx, finalHeight]);
-
   const dotNodes = useMemo(() => {
     if (!positionedGroups.length || finalHeight === 0) return null;
-    const startPos = (visualStartPx / finalHeight) * 100;
-    const endPos = (visualEndPx / finalHeight) * 100;
     const hasSleep = sleepMarkers.wakeTimes.length > 0 || sleepMarkers.bedTimes.length > 0;
+    // Use first task's topPx for start dot when no sleep - aligns dot with line/candy cone
+    const firstTopPx = positionedGroups[0]?.topPx ?? visualStartPx;
+    const startPos = hasSleep ? (visualStartPx / finalHeight) * 100 : (firstTopPx / finalHeight) * 100;
+    const endPos = (visualEndPx / finalHeight) * 100;
     const dotSize = hasSleep ? 28 : 24;
     return (
       <>
@@ -426,8 +454,8 @@ export default function LiquidTimeline({
 
   if (isEmpty) {
     return (
-      <div className="text-center py-12 text-muted-foreground">
-        <p className="text-lg">No scheduled tasks for today</p>
+      <div className="flex flex-col items-center justify-center min-h-[40vh] text-center py-12 px-4 text-muted-foreground">
+        <p className="text-lg font-medium">No scheduled tasks for today</p>
         <p className="text-sm mt-2">Add tasks with specific times to see your timeline</p>
         {onAddTaskClick && (
           <Button onClick={() => onAddTaskClick({ allDay: false })} className="mt-4 rounded-full" variant="outline">
@@ -441,9 +469,9 @@ export default function LiquidTimeline({
 
   if (isSingleTask && singleTask) {
     return (
-      <div className="w-full mx-auto pl-1 pr-0 sm:px-2 md:px-4 mb-12">
-        <div className="py-8 pb-12 pr-1 sm:pr-2">
-          <Card className={`bg-card border border-border shadow-md rounded-lg ${singleTask.completed ? 'opacity-60' : ''}`}>
+      <div className="w-full mx-auto pl-1 pr-0 sm:px-2 md:px-4 mb-8">
+        <div className="pt-1 pb-12 pr-1 sm:pr-2">
+          <Card className={`bg-card border border-border shadow-sm rounded-lg transition-all duration-200 ${singleTask.completed ? 'opacity-60' : ''}`}>
             <CardContent className="p-4">
               <div 
                 className="flex items-center gap-3 w-full cursor-pointer"
@@ -487,10 +515,10 @@ export default function LiquidTimeline({
             </CardContent>
           </Card>
           
-          {/* Add another task button - outside the container */}
+          {/* Add another task button - below single task with minimal gap */}
           {onAddTaskClick && (
-            <div className="mt-8 flex justify-center">
-              <Button variant="outline" size="sm" className="rounded-full" onClick={() => onAddTaskClick({ allDay: false })}>
+            <div className="mt-4 flex justify-center">
+              <Button variant="outline" size="sm" className="rounded-full transition-opacity hover:opacity-90" onClick={() => onAddTaskClick({ allDay: false })}>
                 <Plus className="w-4 h-4 mr-2" /> Add another task to build the timeline
               </Button>
             </div>
@@ -501,11 +529,11 @@ export default function LiquidTimeline({
   }
 
   return (
-    <div className="w-full mx-auto pl-1 pr-0 sm:px-2 md:px-4 mb-12">
+    <div className="w-full mx-auto pl-1 pr-0 sm:px-2 md:px-4 mb-8">
       <div 
-        className="py-8 pb-12 pr-1 sm:pr-2 overflow-visible"
+        className="pt-0 pb-24 pr-1 sm:pr-2 overflow-visible"
         style={{
-          paddingTop: visualStartPx > 0 ? `${visualStartPx + 32}px` : '2rem',
+          paddingTop: visualStartPx > 0 ? `${visualStartPx}px` : '2px',
         }}
       >
         <div 
@@ -525,7 +553,14 @@ export default function LiquidTimeline({
             {gutterLabels}
           </div>
 
-          <TimelineBar bounds={bounds} timelineHeight={finalHeight} startPx={visualStartPx} endPx={visualEndPx} />
+          <TimelineBar
+            bounds={bounds}
+            timelineHeight={finalHeight}
+            startPx={positionedGroups.length && !sleepMarkers.wakeTimes.length && !sleepMarkers.bedTimes.length
+              ? positionedGroups[0].topPx
+              : visualStartPx}
+            endPx={visualEndPx}
+          />
           
           <CurrentTimeIndicator 
             bounds={bounds} 
@@ -548,34 +583,42 @@ export default function LiquidTimeline({
         {sleepDots}
 
           {/* Task groups */}
-          {positionedGroups.map(({ group, topPx, heightPx }) => {
-            return (
+          {positionedGroups.map(({ group, topPx, heightPx }) => (
               <div
                 key={group.id}
-                className="absolute bg-card border border-border shadow-md rounded-lg p-2 flex flex-col gap-2"
+                className="absolute bg-card border border-border shadow-sm rounded-lg p-2 flex flex-col gap-2 transition-shadow duration-200 hover:shadow-md"
                 style={{
                   top: `${topPx}px`,
                   left: "3rem",
                   right: "0.75rem",
                   minHeight: `${heightPx}px`,
+                  zIndex: 5,
                 }}
               >
                 <div className="flex flex-col gap-2 flex-1">
-                  {group.tasks.map(task => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      isInGroup={true}
-                      onToggle={onToggleTask}
-                      onEdit={onUpdateTask ? (t) => onUpdateTask(t.id, t) : undefined}
-                      onDelete={onDeleteTask}
-                    onToggleSubtask={onToggleSubtask}
-                    />
-                  ))}
+                  {group.tasks.map(task => {
+                    const start = task.time ? timeToMinutes(task.time) : 0;
+                    const hasNoEndTime = !task.endTime;
+                    const end = hasNoEndTime ? start + 30 : timeToMinutes(task.endTime!);
+                    const now = currentTime;
+                    const currentMinWithSec = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+                    const isOverdue = hasNoEndTime ? currentMinWithSec >= start : currentMinWithSec > end;
+                    return (
+                      <TaskCard
+                        key={task.id}
+                        task={task}
+                        isInGroup={true}
+                        isOverdue={isOverdue}
+                        onToggle={onToggleTask}
+                        onEdit={onUpdateTask ? (t) => onUpdateTask(t.id, t) : undefined}
+                        onDelete={onDeleteTask}
+                        onToggleSubtask={onToggleSubtask}
+                      />
+                    );
+                  })}
                 </div>
               </div>
-            );
-          })}
+          ))}
 
           {/* Free gaps (>=config min) shown just below prior task */}
           {freeGaps.map(gap => (
@@ -606,22 +649,31 @@ export default function LiquidTimeline({
               )}
             </div>
           ))}
+
+          {/* Add another task button - positioned below last task with minimal gap */}
+          {onAddTaskClick && positionedGroups.length <= 3 && (
+            <div
+              className="absolute flex justify-center left-0 right-0 z-10"
+              style={{
+                top: positionedGroups.length > 0
+                  ? positionedGroups[positionedGroups.length - 1].topPx +
+                    positionedGroups[positionedGroups.length - 1].heightPx + 12
+                  : 0,
+              }}
+            >
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-full transition-opacity hover:opacity-90"
+                onClick={() => onAddTaskClick({ allDay: false })}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add another task to build the timeline
+              </Button>
+            </div>
+          )}
               </div>
             </div>
-            
-      {onAddTaskClick && positionedGroups.length <= 3 && (
-        <div className="mt-8 flex justify-center">
-              <Button
-                    variant="outline"
-                    size="sm"
-            className="rounded-full"
-            onClick={() => onAddTaskClick({ allDay: false })}
-                  >
-            <Plus className="w-4 h-4 mr-2" />
-            Add another task to build the timeline
-                  </Button>
-                </div>
-              )}
     </div>
   );
 }

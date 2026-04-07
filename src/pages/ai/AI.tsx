@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { SEO } from "@/components/general/SEO";
-import { Sparkles, Send, Bot, User, Plus, Settings } from "lucide-react";
+import { Send, Bot, User, Settings, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import AppHeader from "@/components/general/AppHeader";
+import { PageHeader, FeaturesSidebar } from "@/components/general";
 
 interface Message {
   id: string;
@@ -18,6 +18,7 @@ interface Message {
 
 export default function AI() {
   const [showSettings, setShowSettings] = useState(false);
+  const [showFeaturesMenu, setShowFeaturesMenu] = useState(false);
   const [aiSettings, setAiSettings] = useState({
     autoSuggestions: true,
     voiceInput: false,
@@ -48,7 +49,6 @@ export default function AI() {
     setMessages(prev => [...prev, userMessage]);
     setInputText('');
 
-    // Simulate AI response
     setTimeout(() => {
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -68,116 +68,115 @@ export default function AI() {
   ];
 
   return (
-    <div className="min-h-screen bg-background pb-20 pt-16">
+    <div className="h-[100dvh] flex flex-col bg-background overflow-hidden">
       <SEO
         title="AI Assistant"
         description="Chat with your AI assistant"
         noindex={true}
       />
-      <AppHeader 
-        title="AI Assistant" 
-        subtitle="Your intelligent productivity companion"
-        onSettingsClick={() => setShowSettings(true)}
-      />
-      
-      <div className="max-w-4xl mx-auto p-4">
 
-        {/* Quick Actions */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-          {quickActions.map((action, index) => (
+      {/* Fixed Header */}
+      <div className="flex-shrink-0 sticky top-0 z-50 backdrop-blur-2xl bg-white/40 dark:bg-gray-900/40 border-b border-white/30 dark:border-gray-700/30">
+        <div className="px-4 py-3">
+          <div className="flex items-center justify-between">
             <Button
-              key={index}
-              variant="outline"
-              className="h-auto p-4 flex flex-col items-center space-y-2"
-              onClick={() => setInputText(action.text)}
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowFeaturesMenu(true)}
+              className="flex-shrink-0 h-10 w-10"
             >
-              <span className="text-2xl">{action.icon}</span>
-              <span className="text-sm text-center">{action.text}</span>
+              <Menu className="w-5 h-5" />
             </Button>
-          ))}
+            <h1 className="text-lg font-semibold flex-1 text-center">
+              AI Assistant
+            </h1>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowSettings(true)}
+              className="flex-shrink-0 h-10 w-10"
+              aria-label="Settings"
+            >
+              <Settings className="w-5 h-5" />
+            </Button>
+          </div>
         </div>
+      </div>
 
-        {/* Chat Messages */}
-        <Card className="h-96 overflow-y-auto mb-4">
-          <div className="p-4 space-y-4">
+      {/* Chat area - scrollable */}
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-3xl mx-auto px-4 py-4 space-y-4">
             {messages.map((message) => (
               <div
                 key={message.id}
                 className={`flex ${message.isUser ? 'justify-end' : 'justify-start'}`}
               >
-                <div className={`flex items-start space-x-2 max-w-[80%] ${
-                  message.isUser ? 'flex-row-reverse space-x-reverse' : ''
+                <div className={`flex items-start gap-2 max-w-[85%] sm:max-w-[75%] ${
+                  message.isUser ? 'flex-row-reverse' : ''
                 }`}>
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                    message.isUser 
-                      ? 'bg-primary text-primary-foreground' 
-                      : 'bg-muted text-muted-foreground'
-                  }`}>
-                    {message.isUser ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
-                  </div>
-                  <div className={`rounded-lg px-4 py-2 ${
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                     message.isUser
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted text-muted-foreground'
                   }`}>
+                    {message.isUser ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
+                  </div>
+                  <div className={`rounded-2xl px-4 py-2.5 ${
+                    message.isUser
+                      ? 'bg-primary text-primary-foreground rounded-br-md'
+                      : 'bg-muted text-foreground rounded-bl-md'
+                  }`}>
                     <p className="text-sm">{message.text}</p>
                     <p className="text-xs opacity-70 mt-1">
-                      {message.timestamp.toLocaleTimeString()}
+                      {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   </div>
                 </div>
               </div>
             ))}
           </div>
-        </Card>
-
-        {/* Input Area */}
-        <div className="flex space-x-2">
-          <Input
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            placeholder="Ask me anything..."
-            className="flex-1"
-            onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-          />
-          <Button onClick={sendMessage} disabled={!inputText.trim()}>
-            <Send className="w-4 h-4" />
-          </Button>
         </div>
 
-        {/* Features */}
-        <div className="mt-8">
-          <h3 className="text-lg font-semibold mb-4">What I can help you with:</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card className="p-4">
-              <h4 className="font-medium mb-2">📋 Task Management</h4>
-              <p className="text-sm text-muted-foreground">
-                Create, organize, and prioritize your tasks and reminders
-              </p>
-            </Card>
-            <Card className="p-4">
-              <h4 className="font-medium mb-2">📅 Calendar Planning</h4>
-              <p className="text-sm text-muted-foreground">
-                Schedule events and optimize your daily routine
-              </p>
-            </Card>
-            <Card className="p-4">
-              <h4 className="font-medium mb-2">💡 Productivity Tips</h4>
-              <p className="text-sm text-muted-foreground">
-                Get personalized advice to boost your efficiency
-              </p>
-            </Card>
-            <Card className="p-4">
-              <h4 className="font-medium mb-2">🎯 Goal Setting</h4>
-              <p className="text-sm text-muted-foreground">
-                Set and track your personal and professional goals
-              </p>
-            </Card>
+        {/* Quick Actions + Input - above bottom nav */}
+        <div className="flex-shrink-0 p-4 pb-28 sm:pb-32 bg-background border-t border-border">
+          <div className="max-w-3xl mx-auto space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {quickActions.map((action, index) => (
+                <Button
+                  key={index}
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full h-8 text-xs"
+                  onClick={() => setInputText(action.text)}
+                >
+                  <span className="mr-1">{action.icon}</span>
+                  {action.text}
+                </Button>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                placeholder="Ask me anything..."
+                className="flex-1 min-w-0 max-w-full"
+                onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+              />
+              <Button onClick={sendMessage} disabled={!inputText.trim()} size="icon" className="flex-shrink-0 h-10 w-10">
+                <Send className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Settings Dialog */}
+      <FeaturesSidebar
+        isOpen={showFeaturesMenu}
+        onClose={() => setShowFeaturesMenu(false)}
+        onSettingsClick={() => { setShowSettings(true); setShowFeaturesMenu(false); }}
+      />
+
       <Dialog open={showSettings} onOpenChange={setShowSettings}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -195,12 +194,11 @@ export default function AI() {
                 <Switch
                   id="autoSuggestions"
                   checked={aiSettings.autoSuggestions}
-                  onCheckedChange={(checked) => 
+                  onCheckedChange={(checked) =>
                     setAiSettings(prev => ({ ...prev, autoSuggestions: checked }))
                   }
                 />
               </div>
-              
               <div className="flex items-center justify-between">
                 <Label htmlFor="voiceInput" className="text-sm font-medium">
                   Voice Input
@@ -208,12 +206,11 @@ export default function AI() {
                 <Switch
                   id="voiceInput"
                   checked={aiSettings.voiceInput}
-                  onCheckedChange={(checked) => 
+                  onCheckedChange={(checked) =>
                     setAiSettings(prev => ({ ...prev, voiceInput: checked }))
                   }
                 />
               </div>
-              
               <div className="flex items-center justify-between">
                 <Label htmlFor="smartReminders" className="text-sm font-medium">
                   Smart Reminders
@@ -221,12 +218,11 @@ export default function AI() {
                 <Switch
                   id="smartReminders"
                   checked={aiSettings.smartReminders}
-                  onCheckedChange={(checked) => 
+                  onCheckedChange={(checked) =>
                     setAiSettings(prev => ({ ...prev, smartReminders: checked }))
                   }
                 />
               </div>
-              
               <div className="flex items-center justify-between">
                 <Label htmlFor="personalization" className="text-sm font-medium">
                   Personalization
@@ -234,12 +230,11 @@ export default function AI() {
                 <Switch
                   id="personalization"
                   checked={aiSettings.personalization}
-                  onCheckedChange={(checked) => 
+                  onCheckedChange={(checked) =>
                     setAiSettings(prev => ({ ...prev, personalization: checked }))
                   }
                 />
               </div>
-              
               <div className="flex items-center justify-between">
                 <Label htmlFor="dataSharing" className="text-sm font-medium">
                   Data Sharing
@@ -247,18 +242,14 @@ export default function AI() {
                 <Switch
                   id="dataSharing"
                   checked={aiSettings.dataSharing}
-                  onCheckedChange={(checked) => 
+                  onCheckedChange={(checked) =>
                     setAiSettings(prev => ({ ...prev, dataSharing: checked }))
                   }
                 />
               </div>
             </div>
-            
             <div className="pt-4 border-t">
-              <Button 
-                onClick={() => setShowSettings(false)}
-                className="w-full"
-              >
+              <Button onClick={() => setShowSettings(false)} className="w-full">
                 Save Settings
               </Button>
             </div>

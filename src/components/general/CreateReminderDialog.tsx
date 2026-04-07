@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,6 @@ import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Image as ImageIcon, X, MapPin, Flag } from "lucide-react";
 import { ImageViewerDialog } from "@/components/general";
-import { useIsMobile } from "@/hooks/use-mobile";
 
 interface Reminder {
   id: string;
@@ -53,8 +52,6 @@ export default function CreateReminderDialog({
   const [important, setImportant] = useState(initialData?.important || false);
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [emojiPopoverOpen, setEmojiPopoverOpen] = useState(false);
-  const emojiInputRef = useRef<HTMLInputElement>(null);
-  const isMobile = useIsMobile();
 
   // Common emojis for the popover
   const commonEmojis = [
@@ -150,74 +147,39 @@ export default function CreateReminderDialog({
             <div className="space-y-2">
               <Label htmlFor="title">Title *</Label>
               <div className="flex gap-2 items-center">
-                {/* Hidden input for emoji keyboard (mobile only) */}
-                {isMobile && (
-                  <input
-                    ref={emojiInputRef}
-                    type="text"
-                    inputMode="emoji"
-                    value={emoji || '⏰'}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      // Extract emoji from input (take last emoji character if multiple)
-                      const emojiMatch = val.match(/[\p{Emoji}]/gu);
-                      if (emojiMatch && emojiMatch.length > 0) {
-                        setEmoji(emojiMatch[emojiMatch.length - 1]);
-                      } else if (val.length === 0) {
-                        setEmoji('⏰');
-                      }
-                    }}
-                    className="absolute opacity-0 pointer-events-none w-0 h-0"
-                    maxLength={2}
-                  />
-                )}
-                
-                {/* Emoji button - shows popover on desktop, triggers keyboard on mobile */}
-                {isMobile ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="w-16 h-10 text-2xl flex-shrink-0"
-                    onClick={() => {
-                      emojiInputRef.current?.focus();
-                    }}
-                  >
-                    {emoji || '⏰'}
-                  </Button>
-                ) : (
-                  <Popover open={emojiPopoverOpen} onOpenChange={setEmojiPopoverOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        className="w-16 h-10 text-2xl flex-shrink-0"
-                      >
-                        {emoji || '⏰'}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-64 p-3" align="start">
-                      <div className="grid grid-cols-8 gap-2">
-                        {commonEmojis.map((emojiOption) => (
-                          <button
-                            key={emojiOption}
-                            type="button"
-                            onClick={() => {
-                              setEmoji(emojiOption);
-                              setEmojiPopoverOpen(false);
-                            }}
-                            className={`w-8 h-8 rounded-md flex items-center justify-center text-xl hover:bg-muted transition-colors ${
-                              emoji === emojiOption ? 'bg-primary text-primary-foreground' : ''
-                            }`}
-                          >
-                            {emojiOption}
-                          </button>
-                        ))}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                )}
+                {/* Emoji button - popover with grid works on both mobile and desktop */}
+                <Popover open={emojiPopoverOpen} onOpenChange={setEmojiPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="w-12 h-10 text-2xl flex-shrink-0"
+                    >
+                      {emoji || '⏰'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-72 p-3" align="start">
+                    <p className="text-xs text-muted-foreground mb-2">Choose an emoji</p>
+                    <div className="grid grid-cols-8 gap-2">
+                      {commonEmojis.map((emojiOption) => (
+                        <button
+                          key={emojiOption}
+                          type="button"
+                          onClick={() => {
+                            setEmoji(emojiOption);
+                            setEmojiPopoverOpen(false);
+                          }}
+                          className={`w-8 h-8 rounded-md flex items-center justify-center text-xl hover:bg-muted transition-colors ${
+                            emoji === emojiOption ? 'bg-primary text-primary-foreground' : ''
+                          }`}
+                        >
+                          {emojiOption}
+                        </button>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
                 
                 <Input
                   id="title"

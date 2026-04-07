@@ -512,6 +512,11 @@
   }
 }
 
+/* Liquid fill bar - smooth transition as current time advances */
+.liquid-fill-bar {
+  transition: height 1s linear;
+}
+
 /* Liquid fill animation for timeline - fills from 0 to current time */
 @keyframes liquidFillUp {
   from {
@@ -559,20 +564,100 @@
   }
 }
 
+/* Fill from top using height - plays reliably (top-to-bottom fill) */
+@keyframes fillFromTopHeight {
+  0% {
+    height: 0%;
+  }
+  100% {
+    height: 100%;
+  }
+}
+
+/* Class for task-completion fill: animate height 0 → 100% */
+.fill-animation-height {
+  height: 0%;
+  animation: fillFromTopHeight 0.5s ease-out forwards;
+  will-change: height;
+}
+
+/* Task completion bar: fill from top to bottom (covers candy cone). Uses scaleY for reliable playback. */
+@keyframes taskCompleteFill {
+  0% {
+    transform: scaleY(0);
+  }
+  100% {
+    transform: scaleY(1);
+  }
+}
+
+/* Initial state only – no animation; applied on first paint so the animation can run from 0 on next frame */
+.task-complete-fill-bar-initial {
+  transform-origin: top center;
+  transform: scaleY(0);
+  will-change: transform;
+}
+
+.task-complete-fill-bar {
+  transform-origin: top center;
+  transform: scaleY(0);
+  animation: taskCompleteFill 0.6s cubic-bezier(0.33, 1, 0.68, 1) 0.05s forwards;
+  will-change: transform;
+}
+
+/* Static fill - no animation (for tasks completed >650ms ago, e.g. when switching dates) */
+.task-complete-fill-bar-static {
+  transform-origin: top center;
+  transform: scaleY(1);
+}
+
+/* Reverse (uncomplete): fill bar empties from bottom to top */
+@keyframes currentTimePulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.2);
+  }
+}
+
+.current-time-dot-pulse {
+  animation: currentTimePulse 2s ease-in-out infinite;
+}
+
+@keyframes taskCompleteFillReverse {
+  0% {
+    transform: scaleY(1);
+  }
+  100% {
+    transform: scaleY(0);
+  }
+}
+
+.task-complete-fill-bar-reverse {
+  transform-origin: top center;
+  transform: scaleY(1);
+  animation: taskCompleteFillReverse 0.6s cubic-bezier(0.33, 1, 0.68, 1) 0.05s forwards;
+  will-change: transform;
+}
+
 /* Fill from top animation using scaleY */
 @keyframes fillFromTopScaleY {
   0% {
-    transform: scaleY(0) !important;
+    transform: scaleY(0);
   }
   100% {
-    transform: scaleY(1) !important;
+    transform: scaleY(1);
   }
 }
 
 /* Class to trigger animation - must set initial transform for animation to work */
 .fill-animation-scaleY {
-  transform: scaleY(0) !important; /* Initial state - animation will override this */
-  animation: fillFromTopScaleY 0.5s ease-out forwards !important;
+  transform-origin: top center;
+  transform: scaleY(0);
+  animation: fillFromTopScaleY 0.5s ease-out forwards;
 }
 
 /* Class to trigger fill animation */
@@ -590,3 +675,4 @@
     width: 100%;
   }
 }
+

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, lazy, Suspense } from "react";
 import { SEO } from "@/components/general/SEO";
-import { Bell, Plus, Clock, AlertCircle, Settings, X, Droplets, Pill, Moon, Heart, Dumbbell, Briefcase, Filter, Calendar, CheckSquare, CheckCircle2, History, Calendar as CalendarIcon, BarChart3, Menu, Sun, GraduationCap, BookOpen, MapPin, Flag, Image as ImageIcon, Pencil, Trash2, ArrowUpDown } from "lucide-react";
+import { Bell, Plus, Clock, AlertCircle, Settings, X, Droplets, Pill, Heart, Dumbbell, Briefcase, Filter, Calendar, CheckSquare, CheckCircle2, History, Calendar as CalendarIcon, BarChart3, Menu, GraduationCap, BookOpen, MapPin, Flag, Image as ImageIcon, Pencil, Trash2, ArrowUpDown } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -13,7 +13,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import AppHeader from "@/components/general/AppHeader";
 import { PageHeader, FeaturesSidebar, FeatureDialogs, CreateReminderDialog, ImageViewerDialog } from "@/components/general";
 import { useOptimizedLocalStorage } from "@/hooks/useLocalStorage";
-import { useDarkMode } from "@/hooks/useDarkMode";
 import { nanoid } from "nanoid";
 
 // Lazy load heavy dialog
@@ -42,7 +41,6 @@ interface Reminder {
 }
 
 export default function Reminders() {
-  const { isDark, toggle: toggleDarkMode } = useDarkMode();
   const [showSettings, setShowSettings] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [showMenuDialog, setShowMenuDialog] = useState(false);
@@ -167,22 +165,36 @@ export default function Reminders() {
     if (!selectedReminder || !scheduleData.date || !scheduleData.time) return;
     if (!scheduleData.addToTodo && !scheduleData.addToCalendar) return;
 
-    // Add to To Do
+    // Add to To Do - ensure task has time, endTime, dueDate so it shows on timeline
     let todoId: string | undefined;
     if (scheduleData.addToTodo) {
       const todos = JSON.parse(localStorage.getItem('todos') || '[]');
       todoId = nanoid();
+      // Default endTime to 30 min after start if not set
+      const startTime = scheduleData.time;
+      const endTime = scheduleData.endTime || (() => {
+        const [h, m] = startTime.split(':').map(Number);
+        const endMin = (h * 60 + m + 30) % (24 * 60);
+        const eh = Math.floor(endMin / 60);
+        const em = endMin % 60;
+        return `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
+      })();
+      // Use noon local on the scheduled date so timezone doesn't shift the day
+      const dueDateObj = new Date(scheduleData.date);
+      dueDateObj.setHours(12, 0, 0, 0);
       const newTask = {
         id: todoId,
         title: selectedReminder.title,
-        emoji: selectedReminder.emoji,
-        time: scheduleData.time,
+        emoji: selectedReminder.emoji ?? '⏰',
+        time: startTime,
+        endTime,
         completed: false,
         source: 'reminder' as const,
         reminderId: selectedReminder.id,
-        dueDate: new Date(scheduleData.date).toISOString(),
+        dueDate: dueDateObj.toISOString(),
         notes: selectedReminder.note,
         attachments: selectedReminder.image ? [selectedReminder.image] : undefined,
+        location: selectedReminder.location,
       };
       todos.push(newTask);
       localStorage.setItem('todos', JSON.stringify(todos));
@@ -298,40 +310,38 @@ export default function Reminders() {
       />
       {/* Sticky Header */}
       <PageHeader>
-        {/* Header Row - Tabs and Menu */}
         <div className="flex items-center gap-2">
-            <Button
-              variant={activeRemindersTab === 'unscheduled' ? 'default' : 'outline'}
-              size="sm"
-              className="rounded-full flex-1"
+          <Button variant="ghost" size="icon" className="h-10 w-10 flex-shrink-0" onClick={() => setShowMenuDialog(true)}>
+            <Menu className="w-5 h-5" />
+          </Button>
+          <div className="flex-1 relative flex rounded-full bg-muted/50 p-1">
+            <div
+              className="absolute top-1 bottom-1 rounded-full bg-primary/20 shadow-sm transition-all duration-300 ease-out"
+              style={{
+                left: activeRemindersTab === 'unscheduled' ? '4px' : 'calc(50% + 2px)',
+                width: 'calc(50% - 6px)',
+              }}
+            />
+            <button
+              type="button"
               onClick={() => setActiveRemindersTab('unscheduled')}
+              className={`relative z-10 flex-1 py-2 text-sm font-medium rounded-full transition-colors ${
+                activeRemindersTab === 'unscheduled' ? 'text-primary font-semibold' : 'text-muted-foreground'
+              }`}
             >
               To Schedule ({unscheduledReminders.length})
-            </Button>
-            <Button
-              variant={activeRemindersTab === 'scheduled' ? 'default' : 'outline'}
-              size="sm"
-              className="rounded-full flex-1"
+            </button>
+            <button
+              type="button"
               onClick={() => setActiveRemindersTab('scheduled')}
+              className={`relative z-10 flex-1 py-2 text-sm font-medium rounded-full transition-colors ${
+                activeRemindersTab === 'scheduled' ? 'text-primary font-semibold' : 'text-muted-foreground'
+              }`}
             >
               Scheduled ({scheduledReminders.length})
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="icon"
-              onClick={toggleDarkMode}
-              aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-            >
-              {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="icon"
-              onClick={() => setShowMenuDialog(true)}
-            >
-              <Menu className="w-5 h-5" />
-            </Button>
+            </button>
           </div>
+        </div>
       </PageHeader>
       
       {/* Integrations Banner */}
@@ -412,13 +422,13 @@ export default function Reminders() {
         </div>
       )}
       
-      <div className="px-4 py-4" style={{ paddingTop: showIntegrationsBanner ? '120px' : '160px' }}>
+      <div className="px-4 pt-2 pb-4">
         {/* Tab Content */}
         <div className="w-full">
           {activeRemindersTab === 'unscheduled' && (
-            <div className="space-y-3 mt-6">
-            {/* Filters */}
-            <div className="flex items-center gap-2 mb-4 flex-wrap">
+            <div className="space-y-3">
+            {/* Filters - compact, moved up */}
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
               {/* Importance Filter */}
               <div className="flex gap-2">
                 <Button
@@ -563,7 +573,7 @@ export default function Reminders() {
                 </Card>
               ))
             ) : (
-              <div className="text-center py-12">
+              <div className="flex flex-col items-center justify-center min-h-[50vh] text-center py-12 px-4">
                 <Bell className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-muted-foreground mb-2">No reminders to schedule</h3>
                 <p className="text-muted-foreground mb-4">Create a reminder using the + button</p>
@@ -577,9 +587,9 @@ export default function Reminders() {
           )}
 
           {activeRemindersTab === 'scheduled' && (
-            <div className="space-y-3 mt-6">
-            {/* Sort Filter */}
-            <div className="flex items-center gap-2 mb-4 justify-end">
+            <div className="space-y-3">
+            {/* Sort Filter - compact */}
+            <div className="flex items-center gap-2 mb-2 justify-end">
               <div className="flex gap-2">
                 <Button
                   variant={sortBy === 'newest' ? 'default' : 'outline'}
@@ -725,7 +735,7 @@ export default function Reminders() {
                 </Card>
               ))
             ) : (
-              <div className="text-center py-12">
+              <div className="flex flex-col items-center justify-center min-h-[50vh] text-center py-12 px-4">
                 <CalendarIcon className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-muted-foreground mb-2">No scheduled reminders</h3>
                 <p className="text-muted-foreground mb-4">Schedule reminders to see them here</p>
